@@ -34,6 +34,7 @@ defmodule DoubleGisMonitor.Supervisor do
     Logger.info("Supervisor started")
 
     children = [
+      DoubleGisMonitor.Repo,
       DoubleGisMonitor.EventPoller
       # DoubleGisMonitor.EventProcessor,
       # DoubleGisMonitor.MessageDispatcher

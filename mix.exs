@@ -14,8 +14,7 @@ defmodule DoubleGisMonitor.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      applications: [:httpoison],
-      extra_applications: [:logger, :jason],
+      extra_applications: [:logger],
       mod: {DoubleGisMonitor.Application, []}
     ]
   end
@@ -24,7 +23,9 @@ defmodule DoubleGisMonitor.MixProject do
   defp deps do
     [
       {:httpoison, "~> 2.2"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:ecto_sql, "~> 3.11"},
+      {:postgrex, "~> 0.17.5"}
     ]
   end
 end
