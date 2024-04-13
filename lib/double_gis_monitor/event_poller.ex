@@ -29,20 +29,10 @@ defmodule DoubleGisMonitor.EventPoller do
   end
 
   def start_link([]) do
-    {:ok, initial_state} = init([])
-    Agent.start_link(fn -> initial_state end, name: __MODULE__)
+    Agent.start_link(__MODULE__, :init, [], name: __MODULE__)
   end
 
-  def wait() do
-    Process.sleep(1000)
-    poll()
-  end
-
-  #############
-  ## Private
-  #############
-
-  defp init([]) do
+  def init() do
     [city: city, layers: layers, interval: interval] =
       Application.get_env(:double_gis_monitor, :poller,
         city: "moscow",
@@ -55,11 +45,18 @@ defmodule DoubleGisMonitor.EventPoller do
         (Enum.filter(layers, fn x -> valid_layer?(x) end) |> Enum.uniq() |> Enum.join("\",\"")) <>
         "\"]"
 
-    initial_state = %{city: city, layers: layers_str, interval: interval * 1000}
     Process.spawn(__MODULE__, :wait, [], [:link])
-
-    {:ok, initial_state}
+    %{city: city, layers: layers_str, interval: interval * 1000}
   end
+
+  def wait() do
+    Process.sleep(2000)
+    poll()
+  end
+
+  #############
+  ## Private
+  #############
 
   defp wait(interval) do
     Logger.info("Waiting #{interval} ms before next poll")
