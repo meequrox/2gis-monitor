@@ -3,7 +3,7 @@ defmodule DoubleGisMonitor.Event do
 
   schema "events" do
     field(:uuid, :string, primary_key: true)
-    field(:timestamp, :utc_datetime)
+    field(:datetime, :utc_datetime)
     field(:type, :string)
     field(:username, :string)
     field(:coordinates, {:map, :float})
