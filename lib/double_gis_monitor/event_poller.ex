@@ -71,11 +71,14 @@ defmodule DoubleGisMonitor.EventPoller do
 
     url = "https://tugc.2gis.com/1.0/layers/user?project=#{city}&layers=#{layers}"
 
-    case get_event_list(url) do
-      {:ok, _event_list} ->
+    case fetch_events(url) do
+      {:ok, events} ->
         Logger.info("Successfully received events")
 
-      # Send event list to EventProcessor
+        _events = include_embeds(events)
+        Logger.info("Successfully included embeds in events")
+
+      # EventProcessor.process(events)
 
       {:error, reason} ->
         Logger.error(
@@ -92,11 +95,11 @@ defmodule DoubleGisMonitor.EventPoller do
     Enum.member?(valid_layers, layer)
   end
 
-  defp get_event_list(url) do
-    get_event_list(url, 0, {:error, :undefined})
+  defp fetch_events(url) do
+    fetch_events(url, 0, {:error, :undefined})
   end
 
-  defp get_event_list(url, attempt, _prev_result) when attempt < 3 do
+  defp fetch_events(url, attempt, _prev_result) when attempt < 3 do
     case HTTPoison.get(url, "User-Agent": @user_agent) do
       {:ok, resp} ->
         case resp.status_code do
@@ -106,19 +109,50 @@ defmodule DoubleGisMonitor.EventPoller do
           code ->
             Logger.warning("Request failed: status code #{code}, attempt #{attempt + 1}")
 
-            reason = {:code, code}
-
-            get_event_list(url, attempt + 1, {:error, reason})
+            fetch_events(url, attempt + 1, {:error, code})
         end
 
-      {:error, reason} = result ->
+      {:error, reason} ->
         Logger.warning("Request failed: reason #{reason}, attempt #{attempt + 1}")
 
-        get_event_list(url, attempt + 1, result)
+        fetch_events(url, attempt + 1, {:error, reason})
     end
   end
 
-  defp get_event_list(_url, _attempt, prev_result) do
+  defp fetch_events(_url, _attempt, prev_result) do
     prev_result
+  end
+
+  defp get_event_embeds(%{:id => id} = _event) do
+    url = "https://tugc.2gis.com/1.0/event/photo?id=#{id}"
+
+    case HTTPoison.get(url, "User-Agent": @user_agent) do
+      {:ok, resp} ->
+        case resp.status_code do
+          200 ->
+            embeds = Jason.decode!(resp.body)
+
+            {embed_list, embed_count} =
+              Enum.map_reduce(embeds, 0, fn %{:url => url} = _embed, acc -> {url, acc + 1} end)
+
+            {embed_count, embed_list}
+
+          204 ->
+            {0, []}
+        end
+    end
+  end
+
+  defp get_event_embeds(_) do
+    {0, []}
+  end
+
+  defp include_embeds(events) do
+    f =
+      fn event ->
+        Map.put(event, :embeds, get_event_embeds(event))
+      end
+
+    Enum.map(events, f)
   end
 end
