@@ -67,23 +67,22 @@ defmodule DoubleGisMonitor.EventPoller do
 
   defp poll() do
     %{city: city, layers: layers, interval: interval} = Agent.get(__MODULE__, fn map -> map end)
-    Logger.info("Poll options: city '#{city}', layers #{layers}")
+    params = %{project: city, layers: layers}
+    Logger.info("Poll parameters: #{inspect(params)}")
 
-    url = "https://tugc.2gis.com/1.0/layers/user?project=#{city}&layers=#{layers}"
+    url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/layers/user", params)
 
     case fetch_events(url) do
       {:ok, events} ->
         Logger.info("Successfully received events")
 
-        _events = include_embeds(events)
+        events_with_embeds = include_embeds(events)
         Logger.info("Successfully included embeds in events")
 
-      # EventProcessor.process(events)
+        DoubleGisMonitor.EventProcessor.process(events_with_embeds)
 
-      {:error, reason} ->
-        Logger.error(
-          "Couldn't get a list of events: #{reason}. Stop trying until the next timer fires"
-        )
+      {:error, _} ->
+        Logger.error("Couldn't get a list of events. Stop trying until the next timer fires")
     end
 
     wait(interval)
@@ -109,12 +108,14 @@ defmodule DoubleGisMonitor.EventPoller do
           code ->
             Logger.warning("Request failed: status code #{code}, attempt #{attempt + 1}")
 
+            Process.sleep(1000)
             fetch_events(url, attempt + 1, {:error, code})
         end
 
       {:error, reason} ->
-        Logger.warning("Request failed: reason #{reason}, attempt #{attempt + 1}")
+        Logger.warning("Request failed: reason #{inspect(reason)}, attempt #{attempt + 1}")
 
+        Process.sleep(1000)
         fetch_events(url, attempt + 1, {:error, reason})
     end
   end
@@ -124,7 +125,8 @@ defmodule DoubleGisMonitor.EventPoller do
   end
 
   defp get_event_embeds(%{:id => id} = _event) do
-    url = "https://tugc.2gis.com/1.0/event/photo?id=#{id}"
+    params = %{id: id}
+    url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/event/photo", params)
 
     case HTTPoison.get(url, "User-Agent": @user_agent) do
       {:ok, resp} ->

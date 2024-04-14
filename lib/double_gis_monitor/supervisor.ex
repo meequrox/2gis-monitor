@@ -35,8 +35,8 @@ defmodule DoubleGisMonitor.Supervisor do
 
     children = [
       DoubleGisMonitor.Repo,
-      DoubleGisMonitor.EventPoller
-      # DoubleGisMonitor.EventProcessor,
+      DoubleGisMonitor.EventPoller,
+      DoubleGisMonitor.EventProcessor
       # DoubleGisMonitor.MessageDispatcher
     ]
 

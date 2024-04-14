@@ -1,4 +1,4 @@
-defmodule EventProcessor do
+defmodule DoubleGisMonitor.EventProcessor do
   use Agent
   require Logger
 
@@ -62,6 +62,8 @@ defmodule EventProcessor do
       end
 
     Agent.update(__MODULE__, fn _old_state -> new_state end)
+
+    Logger.info("Processed #{Enum.count(events)} events!")
 
     # TODO(0): Insert new events in DB
   end
