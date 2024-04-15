@@ -5,7 +5,8 @@ config(:double_gis_monitor, DoubleGisMonitor.Repo,
   username: "postgres",
   password: "CWPIG-QRVIY-IWDMJ-PDQMV",
   hostname: "localhost",
-  port: 5432
+  port: 5432,
+  log: :info
 )
 
 config(:double_gis_monitor,
@@ -16,7 +17,7 @@ config(:double_gis_monitor,
 config(:double_gis_monitor, :poller,
   city: "novosibirsk",
   layers: ["crash", "roadwork", "restriction", "comment", "other"],
-  interval: 60
+  interval: 600
 )
 
 config(:logger, :console,
