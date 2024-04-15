@@ -1,0 +1,26 @@
+{
+    "version":"0.2.0",
+    "inputs":[
+       {
+          "id":"runArgs",
+          "type":"promptString",
+          "description":"Enter arguments for `mix run -e`"
+       }
+    ],
+    "configurations":[
+       {
+          "type":"mix_task",
+          "name":"mix run",
+          "request":"launch",
+          "task":"run",
+          "taskArgs":[
+             "-e",
+             "${input:runArgs}"
+          ],
+          "startApps":true,
+          "projectDir":"${workspaceRoot}",
+          "exitAfterTaskReturns":false
+       }
+    ]
+ }
+ 

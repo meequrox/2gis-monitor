@@ -1,5 +1,6 @@
 # IDE
 .idea/
+.elixir_ls/
 double_gis_monitor.iml
 
 # The directory Mix will write compiled artifacts to.
