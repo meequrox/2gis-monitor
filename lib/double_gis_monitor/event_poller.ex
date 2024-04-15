@@ -40,13 +40,11 @@ defmodule DoubleGisMonitor.EventPoller do
         interval: 1800
       )
 
-    layers_str =
-      "[\"" <>
-        (Enum.filter(layers, fn x -> valid_layer?(x) end) |> Enum.uniq() |> Enum.join("\",\"")) <>
-        "\"]"
+    layers =
+      layers |> Enum.uniq() |> Enum.filter(fn x -> valid_layer?(x) end) |> Enum.join("\",\"")
 
     Process.spawn(__MODULE__, :wait, [], [:link])
-    %{city: city, layers: layers_str, interval: interval * 1000}
+    %{city: city, layers: "[\"" <> layers <> "\"]", interval: interval * 1000}
   end
 
   def wait() do
@@ -58,6 +56,12 @@ defmodule DoubleGisMonitor.EventPoller do
   ## Private
   #############
 
+  defp valid_layer?(layer) do
+    valid_layers = ["camera", "crash", "roadwork", "restriction", "comment", "other"]
+
+    Enum.member?(valid_layers, layer)
+  end
+
   defp wait(interval) do
     Logger.info("Waiting #{interval} ms before next poll")
 
@@ -67,31 +71,22 @@ defmodule DoubleGisMonitor.EventPoller do
 
   defp poll() do
     %{city: city, layers: layers, interval: interval} = Agent.get(__MODULE__, fn map -> map end)
-    params = %{project: city, layers: layers}
-    Logger.info("Poll parameters: #{inspect(params)}")
 
+    params = %{project: city, layers: layers}
     url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/layers/user", params)
+
+    Logger.info("Poll parameters: #{inspect(params)}")
 
     case fetch_events(url) do
       {:ok, events} ->
         Logger.info("Successfully received events")
-
-        events_with_embeds = include_embeds(events)
-        Logger.info("Successfully included embeds in events")
-
-        DoubleGisMonitor.EventProcessor.process(events_with_embeds)
+        events |> include_attachments() |> DoubleGisMonitor.EventProcessor.process()
 
       {:error, _} ->
         Logger.error("Couldn't get a list of events. Stop trying until the next timer fires")
     end
 
     wait(interval)
-  end
-
-  defp valid_layer?(layer) do
-    valid_layers = ["camera", "crash", "roadwork", "restriction", "comment", "other"]
-
-    Enum.member?(valid_layers, layer)
   end
 
   defp fetch_events(url) do
@@ -124,7 +119,18 @@ defmodule DoubleGisMonitor.EventPoller do
     prev_result
   end
 
-  defp get_event_embeds(%{:id => id} = _event) do
+  defp include_attachments(events) do
+    map_fn =
+      fn e ->
+        {list, count} = get_event_attachments(e)
+
+        e |> Map.put("attachments_count", count) |> Map.put("attachments_list", list)
+      end
+
+    Enum.map(events, map_fn)
+  end
+
+  defp get_event_attachments(%{"id" => id}) do
     params = %{id: id}
     url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/event/photo", params)
 
@@ -132,29 +138,16 @@ defmodule DoubleGisMonitor.EventPoller do
       {:ok, resp} ->
         case resp.status_code do
           200 ->
-            embeds = Jason.decode!(resp.body)
-
-            {embed_list, embed_count} =
-              Enum.map_reduce(embeds, 0, fn %{:url => url} = _embed, acc -> {url, acc + 1} end)
-
-            {embed_count, embed_list}
+            reduce_fn = fn %{"url" => url}, acc -> {url, acc + 1} end
+            Jason.decode!(resp.body) |> Enum.map_reduce(0, reduce_fn)
 
           204 ->
-            {0, []}
+            {[], 0}
         end
     end
   end
 
-  defp get_event_embeds(_) do
-    {0, []}
-  end
-
-  defp include_embeds(events) do
-    f =
-      fn event ->
-        Map.put(event, :embeds, get_event_embeds(event))
-      end
-
-    Enum.map(events, f)
+  defp get_event_attachments(_) do
+    {[], 0}
   end
 end
