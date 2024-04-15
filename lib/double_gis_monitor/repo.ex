@@ -44,7 +44,14 @@ defmodule DoubleGisMonitor.Repo do
   #############
 
   defp ensure_inserted?(
-         %{:uuid => uuid, :likes => likes, :dislikes => dislikes, :attachments_count => attch_cnt} =
+         %{
+           :uuid => uuid,
+           :comment => comment,
+           :likes => likes,
+           :dislikes => dislikes,
+           :attachments_count => atch_count,
+           :attachments_list => atch_list
+         } =
            e
        ) do
     case DoubleGisMonitor.Repo.get(DoubleGisMonitor.Event, uuid) do
@@ -52,11 +59,24 @@ defmodule DoubleGisMonitor.Repo do
         DoubleGisMonitor.Repo.insert(e)
         true
 
-      db_event ->
-        case db_event.likes !== likes or db_event.dislikes !== dislikes or
-               db_event.attachments_count !== attch_cnt do
+      %{
+        :comment => db_comment,
+        :likes => db_likes,
+        :dislikes => db_dislikes,
+        :attachments_count => db_atch_count
+      } ->
+        case db_comment !== comment or db_likes !== likes or db_dislikes !== dislikes or
+               db_atch_count !== atch_count do
           true ->
-            DoubleGisMonitor.Repo.update(e)
+            e
+            |> Ecto.Changeset.change()
+            |> Ecto.Changeset.put_change(:comment, comment)
+            |> Ecto.Changeset.put_change(:likes, likes)
+            |> Ecto.Changeset.put_change(:dislikes, dislikes)
+            |> Ecto.Changeset.put_change(:attachments_count, atch_count)
+            |> Ecto.Changeset.put_change(:attachments_list, atch_list)
+            |> DoubleGisMonitor.Repo.update()
+
             true
 
           false ->
