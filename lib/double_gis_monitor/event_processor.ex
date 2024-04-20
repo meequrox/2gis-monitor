@@ -11,13 +11,6 @@ defmodule DoubleGisMonitor.EventProcessor do
   @doc """
   Returns child specification for supervisor.
   """
-  @spec child_spec() :: %{
-          :id => atom() | term(),
-          :start => {module(), atom(), [term()]},
-          :restart => :permanent | :transient | :temporary,
-          :shutdown => timeout() | :brutal_kill,
-          :type => :worker | :supervisor
-        }
   def child_spec() do
     %{
       id: __MODULE__,
@@ -28,7 +21,6 @@ defmodule DoubleGisMonitor.EventProcessor do
     }
   end
 
-  @spec start_link([]) :: {:error, any()} | {:ok, pid()}
   def start_link([]) do
     Agent.start_link(__MODULE__, :init, [], name: __MODULE__)
   end

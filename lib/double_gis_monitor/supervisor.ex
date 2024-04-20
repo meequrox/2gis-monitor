@@ -25,11 +25,10 @@ defmodule DoubleGisMonitor.Supervisor do
   ## Callbacks
   #############
 
-  @impl true
-  @callback init(init_arg :: term()) :: {:ok, tuple()}
   @doc """
   Callback invoked to start the supervision tree.
   """
+  @impl true
   def init([]) do
     Logger.info("Supervisor started")
 

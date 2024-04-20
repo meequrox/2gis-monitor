@@ -11,13 +11,6 @@ defmodule DoubleGisMonitor.EventPoller do
   @doc """
   Returns child specification for supervisor.
   """
-  @spec child_spec() :: %{
-          :id => atom() | term(),
-          :start => {module(), atom(), [term()]},
-          :restart => :permanent | :transient | :temporary,
-          :shutdown => timeout() | :brutal_kill,
-          :type => :worker | :supervisor
-        }
   def child_spec() do
     %{
       id: __MODULE__,

@@ -33,7 +33,6 @@ defmodule DoubleGisMonitor.Repo do
     {:ok, Enum.reduce(outdated_db_events, 0, reduce_fn)}
   end
 
-  @spec insert_new(any()) :: list()
   def insert_new(events) do
     filter_fn = fn e -> ensure_inserted?(e) end
     Enum.filter(events, filter_fn)
