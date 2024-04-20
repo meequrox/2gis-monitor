@@ -4,7 +4,7 @@ defmodule DoubleGisMonitor.Repo.Migrations.CreateEvents do
   def change() do
     create table(:events, primary_key: false) do
       add(:uuid, :string, primary_key: true)
-      add(:datetime, :utc_datetime)
+      add(:timestamp, :integer)
       add(:type, :string)
       add(:username, :string)
       add(:coordinates, {:map, :float})
