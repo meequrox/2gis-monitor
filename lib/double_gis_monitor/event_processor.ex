@@ -1,6 +1,10 @@
 defmodule DoubleGisMonitor.EventProcessor do
   use Agent
+
   require Logger
+
+  alias DoubleGisMonitor.Repo
+  alias DoubleGisMonitor.Event
 
   @outdate_hours 24
 
@@ -41,7 +45,7 @@ defmodule DoubleGisMonitor.EventProcessor do
         true ->
           Logger.info("Database cleanup started")
 
-          case DoubleGisMonitor.Repo.cleanup(converted_events, @outdate_hours) do
+          case Repo.cleanup(converted_events, @outdate_hours * 3600) do
             {:ok, n} when is_integer(n) ->
               Logger.info("Deleted #{n} old database entries")
               %{state | first_run: false, last_cleanup: datetime_now}
@@ -57,7 +61,7 @@ defmodule DoubleGisMonitor.EventProcessor do
 
     Agent.update(__MODULE__, fn _ -> new_state end)
 
-    new_events = DoubleGisMonitor.Repo.insert_new(converted_events)
+    new_events = Repo.insert_new(converted_events)
 
     # Send new events to dispatcher module
 
@@ -82,9 +86,9 @@ defmodule DoubleGisMonitor.EventProcessor do
          } = e
        )
        when is_integer(ts) and is_map(user_info) do
-    %DoubleGisMonitor.Event{
+    %Event{
       uuid: id,
-      datetime: DateTime.from_unix!(ts),
+      timestamp: ts,
       type: type,
       username: Map.get(user_info, "name"),
       coordinates: %{:lat => lat, :lon => lon},
@@ -97,6 +101,6 @@ defmodule DoubleGisMonitor.EventProcessor do
   end
 
   defp convert_event_to_db(_) do
-    %DoubleGisMonitor.Event{}
+    %Event{}
   end
 end

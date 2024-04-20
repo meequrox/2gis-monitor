@@ -4,6 +4,7 @@ defmodule DoubleGisMonitor.Supervisor do
   """
 
   use Supervisor
+
   require Logger
 
   #############
@@ -13,10 +14,6 @@ defmodule DoubleGisMonitor.Supervisor do
   @doc """
   Function to start the supervisor from application.
   """
-  @spec start_link([]) ::
-          {:ok, pid()}
-          | :ignore
-          | {:error, {:already_started, pid()} | {:shutdown, term()} | term()}
   def start_link([]) do
     Supervisor.start_link(__MODULE__, [], name: __MODULE__)
   end

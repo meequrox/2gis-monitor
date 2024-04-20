@@ -4,6 +4,7 @@ defmodule DoubleGisMonitor.Application do
   """
 
   use Application
+
   require Logger
 
   #############

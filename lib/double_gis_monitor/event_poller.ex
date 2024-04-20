@@ -1,6 +1,9 @@
 defmodule DoubleGisMonitor.EventPoller do
   use Agent
+
   require Logger
+
+  alias DoubleGisMonitor.EventProcessor
 
   @user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.160 YaBrowser/22.5.4.904 Yowser/2.5 Safari/537.36"
 
@@ -74,7 +77,7 @@ defmodule DoubleGisMonitor.EventPoller do
     case fetch_events(url) do
       {:ok, events} ->
         Logger.info("Successfully received events")
-        events |> include_attachments() |> DoubleGisMonitor.EventProcessor.process()
+        events |> include_attachments() |> EventProcessor.process()
 
       {:error, _} ->
         Logger.error("Couldn't get a list of events. Stop trying until the next timer fires")
