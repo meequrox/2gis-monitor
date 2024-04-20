@@ -25,7 +25,10 @@ defmodule DoubleGisMonitor.MixProject do
       {:httpoison, "~> 2.2"},
       {:jason, "~> 1.4"},
       {:ecto_sql, "~> 3.11"},
-      {:postgrex, "~> 0.17.5"}
+      {:postgrex, "~> 0.17.5"},
+      {:ex_gram, "~> 0.52.2"},
+      {:tesla, "~> 1.9"},
+      {:hackney, "~> 1.20"}
     ]
   end
 end

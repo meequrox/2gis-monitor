@@ -30,10 +30,12 @@ defmodule DoubleGisMonitor.Supervisor do
     Logger.info("Supervisor started")
 
     children = [
-      DoubleGisMonitor.Repo,
-      DoubleGisMonitor.EventPoller,
-      DoubleGisMonitor.EventProcessor
-      # DoubleGisMonitor.MessageDispatcher
+      DoubleGisMonitor.Database.Repo,
+      ExGram,
+      {DoubleGisMonitor.Bot.Telegram,
+       [method: :polling, token: Application.fetch_env!(:ex_gram, :token)]},
+      DoubleGisMonitor.Event.Poller,
+      DoubleGisMonitor.Event.Processor
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
