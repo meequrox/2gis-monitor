@@ -37,6 +37,7 @@ defmodule DoubleGisMonitor.EventPoller do
       layers |> Enum.uniq() |> Enum.filter(fn x -> valid_layer?(x) end) |> Enum.join("\",\"")
 
     Process.spawn(__MODULE__, :wait, [], [:link])
+
     %{city: city, layers: "[\"" <> layers <> "\"]", interval: interval * 1000}
   end
 
@@ -49,13 +50,13 @@ defmodule DoubleGisMonitor.EventPoller do
   ## Private
   #############
 
-  defp valid_layer?(layer) do
+  defp valid_layer?(layer) when is_binary(layer) do
     valid_layers = ["camera", "crash", "roadwork", "restriction", "comment", "other"]
 
     Enum.member?(valid_layers, layer)
   end
 
-  defp wait(interval) do
+  defp wait(interval) when is_integer(interval) do
     Logger.info("Waiting #{interval} ms before next poll")
 
     Process.sleep(interval)
@@ -82,11 +83,12 @@ defmodule DoubleGisMonitor.EventPoller do
     wait(interval)
   end
 
-  defp fetch_events(url) do
+  defp fetch_events(url) when is_binary(url) do
     fetch_events(url, 0, {:error, :undefined})
   end
 
-  defp fetch_events(url, attempt, _prev_result) when attempt < 3 do
+  defp fetch_events(url, attempt, prev_result)
+       when is_binary(url) and is_integer(attempt) and is_tuple(prev_result) and attempt < 3 do
     case HTTPoison.get(url, "User-Agent": @user_agent) do
       {:ok, resp} ->
         case resp.status_code do
@@ -108,22 +110,18 @@ defmodule DoubleGisMonitor.EventPoller do
     end
   end
 
-  defp fetch_events(_url, _attempt, prev_result) do
+  defp fetch_events(url, attempt, prev_result)
+       when is_binary(url) and is_integer(attempt) and is_tuple(prev_result) do
     prev_result
   end
 
-  defp include_attachments(events) do
-    map_fn =
-      fn e ->
-        {list, count} = get_event_attachments(e)
-
-        e |> Map.put("attachments_count", count) |> Map.put("attachments_list", list)
-      end
+  defp include_attachments(events) when is_list(events) do
+    map_fn = fn e -> Map.put(e, "attachments", get_event_attachments(e)) end
 
     Enum.map(events, map_fn)
   end
 
-  defp get_event_attachments(%{"id" => id}) do
+  defp get_event_attachments(%{"id" => id}) when is_binary(id) do
     params = %{id: id}
     url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/event/photo", params)
 

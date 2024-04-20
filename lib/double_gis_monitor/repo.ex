@@ -9,7 +9,7 @@ defmodule DoubleGisMonitor.Repo do
   ## API
   #############
 
-  def cleanup(events, hours) do
+  def cleanup(events, hours) when is_list(events) and is_integer(hours) do
     outdated_db_events =
       DoubleGisMonitor.Event |> DoubleGisMonitor.Repo.all() |> find_outdated_events(hours)
 
@@ -33,8 +33,9 @@ defmodule DoubleGisMonitor.Repo do
     {:ok, Enum.reduce(outdated_db_events, 0, reduce_fn)}
   end
 
-  def insert_new(events) do
+  def insert_new(events) when is_list(events) do
     filter_fn = fn e -> ensure_inserted?(e) end
+
     Enum.filter(events, filter_fn)
   end
 
@@ -52,7 +53,8 @@ defmodule DoubleGisMonitor.Repo do
            :attachments_list => atch_list
          } =
            e
-       ) do
+       )
+       when is_binary(uuid) do
     case DoubleGisMonitor.Repo.get(DoubleGisMonitor.Event, uuid) do
       nil ->
         DoubleGisMonitor.Repo.insert(e)
@@ -89,7 +91,7 @@ defmodule DoubleGisMonitor.Repo do
     false
   end
 
-  defp find_outdated_events(db_events, hours) do
+  defp find_outdated_events(db_events, hours) when is_list(db_events) and is_integer(hours) do
     current_datetime = DateTime.utc_now()
 
     filter_fn =

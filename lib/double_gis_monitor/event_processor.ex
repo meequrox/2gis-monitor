@@ -26,10 +26,10 @@ defmodule DoubleGisMonitor.EventProcessor do
   end
 
   def init() do
-    %{first_run: true, last_cleanup: nil}
+    %{first_run: true, last_cleanup: DateTime.from_unix!(0)}
   end
 
-  def process(events) do
+  def process(events) when is_list(events) do
     state = Agent.get(__MODULE__, fn map -> map end)
     datetime_now = DateTime.utc_now()
 
@@ -42,7 +42,7 @@ defmodule DoubleGisMonitor.EventProcessor do
           Logger.info("Database cleanup started")
 
           case DoubleGisMonitor.Repo.cleanup(converted_events, @outdate_hours) do
-            {:ok, n} ->
+            {:ok, n} when is_integer(n) ->
               Logger.info("Deleted #{n} old database entries")
               %{state | first_run: false, last_cleanup: datetime_now}
 
@@ -57,13 +57,12 @@ defmodule DoubleGisMonitor.EventProcessor do
 
     Agent.update(__MODULE__, fn _ -> new_state end)
 
-    new_events =
-      converted_events |> DoubleGisMonitor.Repo.insert_new()
+    new_events = DoubleGisMonitor.Repo.insert_new(converted_events)
 
     # Send new events to dispatcher module
 
     Logger.info(
-      "Processed #{Enum.count(events)} events, inserted (or updated) #{Enum.count(new_events)} events!"
+      "Processed #{Enum.count(converted_events)} events, inserted (or updated) #{Enum.count(new_events)} events!"
     )
   end
 
@@ -79,10 +78,10 @@ defmodule DoubleGisMonitor.EventProcessor do
            "user" => user_info,
            "location" => %{"coordinates" => [lon, lat]},
            "feedbacks" => %{"likes" => likes, "dislikes" => dislikes},
-           "attachments_count" => atch_count,
-           "attachments_list" => atch_list
+           "attachments" => {atch_list, atch_count}
          } = e
-       ) do
+       )
+       when is_integer(ts) and is_map(user_info) do
     %DoubleGisMonitor.Event{
       uuid: id,
       datetime: DateTime.from_unix!(ts),
