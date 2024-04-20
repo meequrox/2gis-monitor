@@ -3,26 +3,62 @@ defmodule DoubleGisMonitor.Repo do
     otp_app: :double_gis_monitor,
     adapter: Ecto.Adapters.Postgres
 
+  import Ecto.Query, only: [from: 2]
+
   require Logger
+
+  alias DoubleGisMonitor.Repo
+  alias DoubleGisMonitor.Event
 
   #############
   ## API
   #############
 
-  def cleanup(events, hours) when is_list(events) and is_integer(hours) do
-    outdated_db_events =
-      DoubleGisMonitor.Event |> DoubleGisMonitor.Repo.all() |> find_outdated_events(hours)
+  def cleanup(events, seconds_treshold) when is_list(events) and is_integer(seconds_treshold) do
+    Repo.transaction(fn -> cleanup_in_transaction(events, seconds_treshold) end)
+  end
+
+  def insert_new(events) when is_list(events) do
+    case Repo.transaction(fn -> insert_new_in_transaction(events) end) do
+      {:ok, list} ->
+        list
+
+      {:error, reason} ->
+        Logger.info(
+          "Transaction failed with reason #{inspect(reason)}, no new events was inserted"
+        )
+
+        []
+    end
+  end
+
+  #############
+  ## Private
+  #############
+
+  defp cleanup_in_transaction(events, seconds_treshold) do
+    ts_now = DateTime.utc_now() |> DateTime.to_unix()
+
+    query =
+      from(e in "events",
+        where: ^ts_now - e.timestamp > ^seconds_treshold,
+        select: [:uuid]
+      )
+
+    outdated_db_events = Repo.all(query)
 
     reduce_fn =
-      fn %{:uuid => outdated_uuid} = s, acc ->
-        find_fn =
-          fn %{:uuid => uuid} ->
-            uuid === outdated_uuid
-          end
-
-        case Enum.find(events, nil, find_fn) do
+      fn s, acc ->
+        case Enum.find(events, nil, fn %{:uuid => uuid} -> uuid === s.uuid end) do
           nil ->
-            DoubleGisMonitor.Repo.delete(s, returning: false)
+            case Repo.delete(%Event{uuid: s.uuid}, returning: false) do
+              {:ok, s} ->
+                s
+
+              {:error, c} ->
+                Repo.rollback(c)
+            end
+
             acc + 1
 
           _ ->
@@ -30,18 +66,14 @@ defmodule DoubleGisMonitor.Repo do
         end
       end
 
-    {:ok, Enum.reduce(outdated_db_events, 0, reduce_fn)}
+    Enum.reduce(outdated_db_events, 0, reduce_fn)
   end
 
-  def insert_new(events) when is_list(events) do
+  def insert_new_in_transaction(events) when is_list(events) do
     filter_fn = fn e -> ensure_inserted?(e) end
 
     Enum.filter(events, filter_fn)
   end
-
-  #############
-  ## Private
-  #############
 
   defp ensure_inserted?(
          %{
@@ -55,9 +87,9 @@ defmodule DoubleGisMonitor.Repo do
            e
        )
        when is_binary(uuid) do
-    case DoubleGisMonitor.Repo.get(DoubleGisMonitor.Event, uuid) do
+    case Repo.get(Event, uuid) do
       nil ->
-        DoubleGisMonitor.Repo.insert(e)
+        Repo.insert(e)
         true
 
       %{
@@ -65,18 +97,18 @@ defmodule DoubleGisMonitor.Repo do
         :likes => db_likes,
         :dislikes => db_dislikes,
         :attachments_count => db_atch_count
-      } ->
+      } = db_event ->
         case db_comment !== comment or db_likes !== likes or db_dislikes !== dislikes or
                db_atch_count !== atch_count do
           true ->
-            e
+            db_event
             |> Ecto.Changeset.change()
             |> Ecto.Changeset.put_change(:comment, comment)
             |> Ecto.Changeset.put_change(:likes, likes)
             |> Ecto.Changeset.put_change(:dislikes, dislikes)
             |> Ecto.Changeset.put_change(:attachments_count, atch_count)
             |> Ecto.Changeset.put_change(:attachments_list, atch_list)
-            |> DoubleGisMonitor.Repo.update()
+            |> Repo.update()
 
             true
 
@@ -89,16 +121,5 @@ defmodule DoubleGisMonitor.Repo do
   defp ensure_inserted?(%{} = e) do
     Logger.warning("Event #{inspect(e)} doest not contain required keys!")
     false
-  end
-
-  defp find_outdated_events(db_events, hours) when is_list(db_events) and is_integer(hours) do
-    current_datetime = DateTime.utc_now()
-
-    filter_fn =
-      fn %{:datetime => event_datetime} ->
-        DateTime.diff(current_datetime, event_datetime, :hour) > hours
-      end
-
-    Enum.filter(db_events, filter_fn)
   end
 end
