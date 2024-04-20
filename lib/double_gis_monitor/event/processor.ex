@@ -1,10 +1,10 @@
-defmodule DoubleGisMonitor.EventProcessor do
+defmodule DoubleGisMonitor.Event.Processor do
   use Agent
 
   require Logger
 
-  alias DoubleGisMonitor.Repo
-  alias DoubleGisMonitor.Event
+  alias DoubleGisMonitor.Database.Repo
+  alias DoubleGisMonitor.Database.Event
 
   @outdate_hours 24
 
@@ -50,8 +50,8 @@ defmodule DoubleGisMonitor.EventProcessor do
               Logger.info("Deleted #{n} old database entries")
               %{state | first_run: false, last_cleanup: datetime_now}
 
-            err ->
-              Logger.warning("Unknown result from cleanup function: #{inspect(err)}")
+            {:error, reason} ->
+              Logger.error("Database cleanup failed with reason #{inspect(reason)}")
               state
           end
 
@@ -61,7 +61,7 @@ defmodule DoubleGisMonitor.EventProcessor do
 
     Agent.update(__MODULE__, fn _ -> new_state end)
 
-    new_events = Repo.insert_new(converted_events)
+    new_events = Repo.update_events(converted_events)
 
     # Send new events to dispatcher module
 

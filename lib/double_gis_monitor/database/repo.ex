@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Repo do
+defmodule DoubleGisMonitor.Database.Repo do
   use Ecto.Repo,
     otp_app: :double_gis_monitor,
     adapter: Ecto.Adapters.Postgres
@@ -7,26 +7,31 @@ defmodule DoubleGisMonitor.Repo do
 
   require Logger
 
-  alias DoubleGisMonitor.Repo
-  alias DoubleGisMonitor.Event
+  alias DoubleGisMonitor.Database.Event
 
   #############
   ## API
   #############
 
   def cleanup(events, seconds_treshold) when is_list(events) and is_integer(seconds_treshold) do
-    Repo.transaction(fn -> cleanup_in_transaction(events, seconds_treshold) end)
+    case transaction(fn -> cleanup_in_transaction(events, seconds_treshold) end) do
+      {:error, reason} = err ->
+        Logger.error("Transaction failed with reason #{inspect(reason)}, no events was deleted")
+
+        err
+
+      any ->
+        any
+    end
   end
 
-  def insert_new(events) when is_list(events) do
-    case Repo.transaction(fn -> insert_new_in_transaction(events) end) do
+  def update_events(events) when is_list(events) do
+    case transaction(fn -> update_events_in_transaction(events) end) do
       {:ok, list} ->
         list
 
       {:error, reason} ->
-        Logger.info(
-          "Transaction failed with reason #{inspect(reason)}, no new events was inserted"
-        )
+        Logger.error("Transaction failed with reason #{inspect(reason)}, no events was updated")
 
         []
     end
@@ -45,18 +50,18 @@ defmodule DoubleGisMonitor.Repo do
         select: [:uuid]
       )
 
-    outdated_db_events = Repo.all(query)
+    outdated_db_events = all(query)
 
     reduce_fn =
       fn s, acc ->
         case Enum.find(events, nil, fn %{:uuid => uuid} -> uuid === s.uuid end) do
           nil ->
-            case Repo.delete(%Event{uuid: s.uuid}, returning: false) do
+            case delete(%Event{uuid: s.uuid}, returning: false) do
               {:ok, s} ->
                 s
 
               {:error, c} ->
-                Repo.rollback(c)
+                rollback(c)
             end
 
             acc + 1
@@ -69,7 +74,7 @@ defmodule DoubleGisMonitor.Repo do
     Enum.reduce(outdated_db_events, 0, reduce_fn)
   end
 
-  def insert_new_in_transaction(events) when is_list(events) do
+  def update_events_in_transaction(events) when is_list(events) do
     filter_fn = fn e -> ensure_inserted?(e) end
 
     Enum.filter(events, filter_fn)
@@ -87,9 +92,9 @@ defmodule DoubleGisMonitor.Repo do
            e
        )
        when is_binary(uuid) do
-    case Repo.get(Event, uuid) do
+    case get(Event, uuid) do
       nil ->
-        Repo.insert(e)
+        insert(e)
         true
 
       %{
@@ -108,7 +113,7 @@ defmodule DoubleGisMonitor.Repo do
             |> Ecto.Changeset.put_change(:dislikes, dislikes)
             |> Ecto.Changeset.put_change(:attachments_count, atch_count)
             |> Ecto.Changeset.put_change(:attachments_list, atch_list)
-            |> Repo.update()
+            |> update()
 
             true
 
