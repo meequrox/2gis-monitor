@@ -26,10 +26,10 @@ defmodule DoubleGisMonitor.Database.Repo do
     end
   end
 
-  def update_events(events) when is_list(events) do
-    case transaction(fn -> update_events_in_transaction(events) end) do
-      {:ok, list} ->
-        list
+  def insert_or_update_events(events) when is_list(events) do
+    case transaction(fn -> insert_or_update_events_in_transaction(events) end) do
+      {:ok, result} ->
+        result
 
       {:error, reason} ->
         Logger.error("Transaction failed with reason #{inspect(reason)}, no events was updated")
@@ -110,10 +110,12 @@ defmodule DoubleGisMonitor.Database.Repo do
     Enum.reduce(outdated_db_events, 0, reduce_fn)
   end
 
-  def update_events_in_transaction(events) when is_list(events) do
-    filter_fn = fn e -> ensure_inserted?(e) end
+  def insert_or_update_events_in_transaction(events) when is_list(events) do
+    events_with_op = for e <- events, do: ensure_inserted?(e)
 
-    Enum.filter(events, filter_fn)
+    events_with_op
+    |> Enum.group_by(fn {op, _e} -> op end, fn {_op, e} -> e end)
+    |> Map.delete(:skip)
   end
 
   defp ensure_inserted?(
@@ -130,7 +132,7 @@ defmodule DoubleGisMonitor.Database.Repo do
     case get(Event, uuid) do
       nil ->
         insert(e)
-        true
+        {:insert, e}
 
       %{
         :comment => db_comment,
@@ -150,10 +152,10 @@ defmodule DoubleGisMonitor.Database.Repo do
             |> Ecto.Changeset.put_change(:attachments_list, atch_list)
             |> update()
 
-            true
+            {:update, e}
 
           false ->
-            false
+            {:skip, e}
         end
     end
   end

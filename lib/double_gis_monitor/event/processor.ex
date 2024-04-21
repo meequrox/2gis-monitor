@@ -5,6 +5,7 @@ defmodule DoubleGisMonitor.Event.Processor do
 
   alias DoubleGisMonitor.Database.Repo
   alias DoubleGisMonitor.Database.Event
+  alias DoubleGisMonitor.Event.Dispatcher
 
   @outdate_hours 24
 
@@ -61,12 +62,18 @@ defmodule DoubleGisMonitor.Event.Processor do
 
     Agent.update(__MODULE__, fn _ -> new_state end)
 
-    new_events = Repo.update_events(converted_events)
+    events =
+      Repo.insert_or_update_events(converted_events)
+      |> Map.update(:update, [], fn ex -> ex end)
+      |> Map.update(:insert, [], fn ex -> ex end)
 
-    # Send new events to dispatcher module
+    Dispatcher.dispatch(events)
+
+    updated_count = Map.get(events, :update) |> Enum.count()
+    inserted_count = Map.get(events, :insert) |> Enum.count()
 
     Logger.info(
-      "Processed #{Enum.count(converted_events)} events, inserted (or updated) #{Enum.count(new_events)} events!"
+      "Events: processed #{Enum.count(converted_events)}, inserted #{inserted_count}, updated #{updated_count}."
     )
   end
 
@@ -94,7 +101,7 @@ defmodule DoubleGisMonitor.Event.Processor do
       coordinates: %{:lat => lat, :lon => lon},
       comment: Map.get(e, "comment"),
       likes: likes,
-      dislikes: dislikes,
+      dislikes: dislikes * -1,
       attachments_count: atch_count,
       attachments_list: atch_list
     }

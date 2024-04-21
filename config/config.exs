@@ -10,6 +10,7 @@ config(:tesla, Tesla.Middleware.Logger, debug: false)
 
 import_config("repo.exs")
 import_config("poller.exs")
+import_config("dispatcher.exs")
 
 if File.exists?("config/private.exs") do
   import_config("private.exs")

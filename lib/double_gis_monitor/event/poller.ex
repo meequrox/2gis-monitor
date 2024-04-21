@@ -128,6 +128,8 @@ defmodule DoubleGisMonitor.Event.Poller do
     params = %{id: id}
     url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/event/photo", params)
 
+    Process.sleep(50)
+
     case HTTPoison.get(url, "User-Agent": @user_agent) do
       {:ok, resp} ->
         case resp.status_code do
