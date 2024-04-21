@@ -1,8 +1,9 @@
-defmodule DoubleGisMonitor.Event.Dispatcher do
-  alias DoubleGisMonitor.Worker.Poller
-  alias DoubleGisMonitor.Db.Repo
-
+defmodule DoubleGisMonitor.Worker.Dispatcher do
   require Logger
+
+  alias DoubleGisMonitor.Worker.Poller
+  alias DoubleGisMonitor.Db
+  alias ExGram.Model
 
   def dispatch(events) when is_map(events) do
     dispatcher = Process.spawn(__MODULE__, :dispatch, [:spawned, events], [:link])
@@ -18,8 +19,9 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
 
   def dispatch_updates(events) do
     msg_fn =
-      fn e ->
-        _text = prepare_text(e)
+      fn _e ->
+        # text = prepare_text(e)
+        # media = build_media(e, text)
 
         chat_fn =
           fn %{:id => _id} ->
@@ -28,7 +30,7 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
             Process.sleep(3000)
           end
 
-        Enum.each(Repo.get_chats(), chat_fn)
+        Enum.each(Db.Utils.Chat.all(), chat_fn)
       end
 
     Enum.each(events, msg_fn)
@@ -38,23 +40,41 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
     text_fn =
       fn e ->
         text = prepare_text(e)
+        media = build_media(e, text)
 
         chat_fn =
           fn %{:id => id} ->
             Process.sleep(3000)
 
-            # TODO: DISABLE PREVIEW!
-            case ExGram.send_message(id, text, parse_mode: "HTML", disable_web_page_preview: true) do
-              {:ok, _message} ->
+            link_preview_opts = %Model.LinkPreviewOptions{is_disabled: true}
+            send_opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
+
+            result =
+              case e.attachments_count do
+                0 ->
+                  ExGram.send_message(id, text, send_opts)
+
+                _ ->
+                  ExGram.send_media_group(id, media)
+              end
+
+            case result do
+              {:ok, message} when is_map(message) ->
                 # Repo.add_message()
-                :ok
+                Logger.info("Message #{message.message_id} was linked with event #{e.uuid}")
+
+              {:ok, messages} when is_list(messages) ->
+                # Repo.add_messages()
+                ids = Enum.map(messages, fn m -> m.message_id end)
+
+                Logger.info("Messages #{inspect(ids)} were linked with event #{e.uuid}")
 
               {:error, error} ->
                 Logger.error("Failed to send new message to chat #{id}: #{inspect(error)}")
             end
           end
 
-        Enum.each(Repo.get_chats(), chat_fn)
+        Enum.each(Db.Utils.Chat.all(), chat_fn)
       end
 
     Enum.each(events, text_fn)
@@ -105,15 +125,14 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
       HTTPoison.Base.build_request_url("https://2gis.ru/#{poller_state.city}", params) <>
         "/18?traffic="
 
-    msg <> "\n<a href=\"#{url}\">Open in 2GIS</a>\n"
+    msg <> "\n\n<a href=\"#{url}\">Open in 2GIS</a>\n"
   end
 
   defp append_link(msg, _e), do: msg
 
-  defp append_attachments(msg, %{:attachments_count => count, :attachments_list => list})
-       when is_integer(count) and is_list(list) and count > 0 do
-    # TODO: really append attachments
-    msg <> "#{count} attachments"
+  defp append_attachments(msg, %{:attachments_count => count})
+       when is_integer(count) and count > 0 do
+    msg <> "\nAttachments: #{count}"
   end
 
   defp append_attachments(msg, _e), do: msg
@@ -144,5 +163,29 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
     |> DateTime.from_unix!()
     |> DateTime.shift_zone!(tz, TimeZoneInfo.TimeZoneDatabase)
     |> Calendar.strftime("%d.%m.%y %H:%M:%S")
+  end
+
+  defp build_media(%{:attachments_count => count, :attachments_list => list}, text) do
+    reduce_fn =
+      fn url, acc ->
+        case acc do
+          0 ->
+            {%Model.InputMediaPhoto{type: "photo", media: url, caption: text, parse_mode: "HTML"},
+             acc + 1}
+
+          _ ->
+            {%Model.InputMediaPhoto{type: "photo", media: url}, acc + 1}
+        end
+      end
+
+    case count do
+      0 ->
+        []
+
+      _ ->
+        {result, _} = Enum.map_reduce(list, 0, reduce_fn)
+
+        result
+    end
   end
 end
