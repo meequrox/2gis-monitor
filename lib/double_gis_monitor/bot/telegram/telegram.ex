@@ -8,11 +8,13 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   require Logger
 
   alias DoubleGisMonitor.Bot.Telegram.Middleware
+  alias DoubleGisMonitor.Event.Poller
+  alias DoubleGisMonitor.Event.Processor
   alias DoubleGisMonitor.Database.Event
   alias DoubleGisMonitor.Database.Repo
   alias ExGram.Model
 
-  command("start")
+  command("start", description: "Start polling events")
   command("help", description: "Print the bot's help")
   command("info", description: "Print current service status")
 
@@ -52,16 +54,14 @@ defmodule DoubleGisMonitor.Bot.Telegram do
         {:command, "info@" <> _b, %Model.Message{:chat => %Model.Chat{:id => chat_id}}},
         cnt
       ) do
-    %{city: city, layers: layers, interval: interval} =
-      Agent.get(Event.Poller, fn map -> map end)
-
-    %{last_cleanup: last_cleanup} = Agent.get(Event.Processor, fn map -> map end)
+    %{city: city, layers: layers, interval: interval} = Agent.get(Poller, fn map -> map end)
+    %{last_cleanup: last_cleanup} = Agent.get(Processor, fn map -> map end)
 
     reply =
       "City: #{String.capitalize(city)}" <>
         "\nLayers: `#{layers}`" <>
         "\nInterval: #{trunc(interval / 1000)} seconds" <>
-        "\nEvents in database: #{%Event{} |> Repo.all() |> Enum.count()}" <>
+        "\nEvents in database: #{Repo.aggregate(Event, :count)}" <>
         "\nLast database cleanup: #{DateTime.diff(DateTime.utc_now(), last_cleanup, :hour)} hours ago"
 
     ExGram.send_message!(chat_id, reply, parse_mode: "MarkdownV2")
@@ -75,13 +75,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
       ) do
     map_fn =
       fn %Model.BotCommand{:command => cmd, :description => desc} ->
-        case is_binary(desc) do
-          true ->
-            "/#{cmd}@#{bot_username} - #{desc}"
-
-          false ->
-            "/#{cmd}@#{bot_username}"
-        end
+        "/#{cmd}@#{bot_username} - #{desc}"
       end
 
     reply = ExGram.get_my_commands!() |> Enum.map(map_fn) |> Enum.join("\n")
