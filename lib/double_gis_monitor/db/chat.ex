@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Database.Chat do
+defmodule DoubleGisMonitor.Db.Chat do
   use Ecto.Schema
 
   @primary_key {:id, :integer, autogenerate: false}

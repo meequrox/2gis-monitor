@@ -7,19 +7,31 @@ defmodule DoubleGisMonitor.Application do
 
   require Logger
 
-  #############
-  ## Callbacks
-  #############
-
   @doc """
   Called when an application is started (usually from `Mix.Project.application/0`).
   This callback is responsible for starting its supervision tree.
   """
   @impl true
   def start(_type, _args) do
-    Logger.info("Application started, cwd is #{File.cwd!()}")
+    Logger.info("App started, cwd: #{File.cwd!()}")
 
-    DoubleGisMonitor.Supervisor.start_link([])
+    children = [
+      DoubleGisMonitor.Db.Repo,
+      # {OPQ, name: :telegram_send_limiter},
+      # {OPQ, name: :double_gis_poll_limiter},
+      ExGram,
+      {DoubleGisMonitor.Bot.Tg,
+       [
+         method: :polling,
+         allowed_updates: ["message"],
+         token: Application.fetch_env!(:ex_gram, :token)
+       ]},
+      DoubleGisMonitor.Worker.Poller,
+      DoubleGisMonitor.Worker.Processor
+    ]
+
+    opts = [strategy: :one_for_one, name: __MODULE__.Supervisor]
+    Supervisor.start_link(children, opts)
   end
 
   @doc """
@@ -27,6 +39,6 @@ defmodule DoubleGisMonitor.Application do
   """
   @impl true
   def stop(_state) do
-    Logger.info("Application stopped")
+    Logger.info("App stopped")
   end
 end

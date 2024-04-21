@@ -1,6 +1,6 @@
 import Config
 
-config(:double_gis_monitor, DoubleGisMonitor.Database.Repo,
+config(:double_gis_monitor, DoubleGisMonitor.Db.Repo,
   database: "double_gis_monitor_repo",
   username: "postgres",
   password: "CWPIG-QRVIY-IWDMJ-PDQMV",
@@ -10,5 +10,5 @@ config(:double_gis_monitor, DoubleGisMonitor.Database.Repo,
 )
 
 config(:double_gis_monitor,
-  ecto_repos: [DoubleGisMonitor.Database.Repo]
+  ecto_repos: [DoubleGisMonitor.Db.Repo]
 )

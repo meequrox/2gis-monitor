@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Bot.Telegram.Middleware.IgnorePrivateMessages do
+defmodule DoubleGisMonitor.Bot.Tg.Middleware.IgnorePm do
   use ExGram.Middleware
 
   require Logger

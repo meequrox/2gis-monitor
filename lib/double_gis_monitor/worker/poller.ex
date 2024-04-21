@@ -1,15 +1,11 @@
-defmodule DoubleGisMonitor.Event.Poller do
+defmodule DoubleGisMonitor.Worker.Poller do
   use Agent
 
   require Logger
 
-  alias DoubleGisMonitor.Event.Processor
+  alias DoubleGisMonitor.Worker.Processor
 
   @user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.160 YaBrowser/22.5.4.904 Yowser/2.5 Safari/537.36"
-
-  #############
-  ## API
-  #############
 
   @doc """
   Returns child specification for supervisor.
@@ -48,10 +44,6 @@ defmodule DoubleGisMonitor.Event.Poller do
     Process.sleep(2000)
     poll()
   end
-
-  #############
-  ## Private
-  #############
 
   defp valid_layer?(layer) when is_binary(layer) do
     valid_layers = ["camera", "crash", "roadwork", "restriction", "comment", "other"]

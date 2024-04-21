@@ -1,6 +1,6 @@
 defmodule DoubleGisMonitor.Event.Dispatcher do
-  alias DoubleGisMonitor.Event.Poller
-  alias DoubleGisMonitor.Database.Repo
+  alias DoubleGisMonitor.Worker.Poller
+  alias DoubleGisMonitor.Db.Repo
 
   require Logger
 
@@ -19,16 +19,13 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
   def dispatch_updates(events) do
     msg_fn =
       fn e ->
-        msg = prepare_message(e)
-
-        Logger.warning("Message:\n#{msg}; sleeping now...")
-        Process.sleep(600_000)
+        _text = prepare_text(e)
 
         chat_fn =
           fn %{:id => _id} ->
             # TODO: update message
 
-            Process.sleep(100)
+            Process.sleep(3000)
           end
 
         Enum.each(Repo.get_chats(), chat_fn)
@@ -38,25 +35,32 @@ defmodule DoubleGisMonitor.Event.Dispatcher do
   end
 
   def dispatch_inserts(events) do
-    msg_fn =
+    text_fn =
       fn e ->
-        msg = prepare_message(e)
+        text = prepare_text(e)
 
         chat_fn =
           fn %{:id => id} ->
-            Process.sleep(100)
+            Process.sleep(3000)
 
             # TODO: DISABLE PREVIEW!
-            ExGram.send_message(id, msg, parse_mode: "HTML", disable_web_page_preview: true)
+            case ExGram.send_message(id, text, parse_mode: "HTML", disable_web_page_preview: true) do
+              {:ok, _message} ->
+                # Repo.add_message()
+                :ok
+
+              {:error, error} ->
+                Logger.error("Failed to send new message to chat #{id}: #{inspect(error)}")
+            end
           end
 
         Enum.each(Repo.get_chats(), chat_fn)
       end
 
-    Enum.each(events, msg_fn)
+    Enum.each(events, text_fn)
   end
 
-  defp prepare_message(event) do
+  defp prepare_text(event) do
     create_meta(event)
     |> append_username(event)
     |> append_comment(event)

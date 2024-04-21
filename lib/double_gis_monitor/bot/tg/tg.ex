@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Bot.Telegram do
+defmodule DoubleGisMonitor.Bot.Tg do
   @bot :double_gis_monitor
 
   use ExGram.Bot,
@@ -7,12 +7,10 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   require Logger
 
-  alias DoubleGisMonitor.Bot.Telegram.Middleware
-  alias DoubleGisMonitor.Event.Poller
-  alias DoubleGisMonitor.Event.Processor
-  alias DoubleGisMonitor.Database.Chat, as: DbChat
-  alias DoubleGisMonitor.Database.Event
-  alias DoubleGisMonitor.Database.Repo
+  alias DoubleGisMonitor.Bot.Tg.Middleware
+  alias DoubleGisMonitor.Worker.Poller
+  alias DoubleGisMonitor.Worker.Processor
+  alias DoubleGisMonitor.Db
   alias ExGram.Cnt
   alias ExGram.Error
 
@@ -20,11 +18,12 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   command("stop", description: "Stop polling events")
   command("help", description: "Print the bot's help")
   command("info", description: "Print current service status")
+  command("reset", description: "Reset database (clear all events)")
 
-  middleware(Middleware.IgnorePrivateMessages)
+  middleware(Middleware.IgnorePm)
 
   def init(_opts) do
-    Repo.transaction(fn -> init_in_transaction() end)
+    Db.Repo.transaction(fn -> init_in_transaction() end)
   end
 
   def bot(), do: @bot
@@ -39,7 +38,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     reply =
       "Now bot will perform the distribution of event updates on the 2GIS map in this chat."
 
-    Repo.add_chat(cnt.update.message.chat.id, cnt.update.message.chat.title)
+    Db.Utils.Chat.add(cnt.update.message.chat.id, cnt.update.message.chat.title)
 
     answer(cnt, reply)
   end
@@ -48,13 +47,23 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     reply =
       "Now bot will stop sending event updates on the 2GIS map in this chat."
 
-    case Repo.get(DbChat, cnt.update.message.chat.id) do
+    case Db.Repo.get(Db.Chat, cnt.update.message.chat.id) do
       nil ->
         :ok
 
       chat ->
-        Repo.delete_chat(chat)
+        Db.Utils.Chat.delete(chat)
     end
+
+    answer(cnt, reply)
+  end
+
+  def handle({:command, "help@" <> _b, _msg}, cnt) do
+    commands =
+      for bc <- ExGram.get_my_commands!(),
+          do: "/#{bc.command}@#{cnt.bot_info.username} - #{bc.description}"
+
+    reply = Enum.join(commands, "\n")
 
     answer(cnt, reply)
   end
@@ -76,14 +85,25 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     answer(cnt, reply)
   end
 
-  def handle({:command, "help@" <> _b, _msg}, cnt) do
-    commands =
-      for bc <- ExGram.get_my_commands!(),
-          do: "/#{bc.command}@#{cnt.bot_info.username} - #{bc.description}"
+  def handle({:command, "reset@" <> _b, msg}, cnt) do
+    [reset_password: pass] = Application.fetch_env!(:double_gis_monitor, :tg_bot)
 
-    reply = Enum.join(commands, "\n")
+    if msg.text == pass do
+      case Db.Utils.Event.reset() do
+        {:ok, result} ->
+          Logger.info("Reset events successfully: #{inspect(result)}")
 
-    answer(cnt, reply)
+          %{:id => poller_id} = DoubleGisMonitor.Worker.Poller.child_spec()
+
+          Supervisor.terminate_child(DoubleGisMonitor.Application.Supervisor, poller_id)
+          Supervisor.restart_child(DoubleGisMonitor.Application.Supervisor, poller_id)
+
+        {:error, error} ->
+          Logger.error("Events reset failed error: #{inspect(error)}")
+      end
+    end
+
+    cnt
   end
 
   def handle(msg, cnt) do
@@ -106,21 +126,21 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
             Logger.warning("#{c.title} (#{c.id}): #{message}")
 
-            Repo.delete_chat(c)
+            Db.Utils.Chat.delete(c)
         end
       end
 
-    Enum.each(Repo.get_chats(), each_fn)
+    Enum.each(Db.Utils.Chat.all(), each_fn)
   end
 
   defp prepare_status(map, cnt) do
     map
-    |> Map.put(:active, Repo.chat_exists?(cnt.update.message.chat.id) |> inspect())
+    |> Map.put(:active, Db.Utils.Chat.exists?(cnt.update.message.chat.id) |> inspect())
     |> Map.put(:city, String.capitalize(map.city))
     |> Map.put(:layers, prepare_layers(map.layers))
     |> Map.put(:interval, trunc(map.interval / 1000))
     |> Map.put(:last_cleanup, DateTime.diff(DateTime.utc_now(), map.last_cleanup, :hour))
-    |> Map.put(:events_count, Repo.aggregate(Event, :count))
+    |> Map.put(:events_count, Db.Repo.aggregate(Db.Event, :count))
   end
 
   defp prepare_layers(layers),

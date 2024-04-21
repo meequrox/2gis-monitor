@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Database.Event do
+defmodule DoubleGisMonitor.Db.Event do
   use Ecto.Schema
 
   @primary_key {:uuid, :string, autogenerate: false}

@@ -1,21 +1,12 @@
-defmodule DoubleGisMonitor.Database.Repo do
-  use Ecto.Repo,
-    otp_app: :double_gis_monitor,
-    adapter: Ecto.Adapters.Postgres
+defmodule DoubleGisMonitor.Db.Utils.Event do
+  require Logger
 
   import Ecto.Query, only: [from: 2]
 
-  require Logger
-
-  alias DoubleGisMonitor.Database.Event
-  alias DoubleGisMonitor.Database.Chat
-
-  #############
-  ## API
-  #############
+  alias DoubleGisMonitor.Db
 
   def cleanup(events, seconds_treshold) when is_list(events) and is_integer(seconds_treshold) do
-    case transaction(fn -> cleanup_in_transaction(events, seconds_treshold) end) do
+    case Db.Repo.transaction(fn -> cleanup(:transaction, events, seconds_treshold) end) do
       {:error, reason} = err ->
         Logger.error("Transaction failed with reason #{inspect(reason)}, no events was deleted")
 
@@ -26,8 +17,8 @@ defmodule DoubleGisMonitor.Database.Repo do
     end
   end
 
-  def insert_or_update_events(events) when is_list(events) do
-    case transaction(fn -> insert_or_update_events_in_transaction(events) end) do
+  def insert_or_update(events) when is_list(events) do
+    case Db.Repo.transaction(fn -> insert_or_update(:transaction, events) end) do
       {:ok, result} ->
         result
 
@@ -38,46 +29,13 @@ defmodule DoubleGisMonitor.Database.Repo do
     end
   end
 
-  def add_chat(id, title) do
-    case get(Chat, id) do
-      nil ->
-        insert(%Chat{id: id, title: title})
+  def reset() do
+    table = Db.Event.__schema__(:source)
 
-      db_chat ->
-        db_chat
-        |> Ecto.Changeset.change()
-        |> Ecto.Changeset.put_change(:title, title)
-        |> update()
-    end
+    Db.Repo.query("TRUNCATE #{table}", [])
   end
 
-  def get_chats(), do: all(Chat)
-
-  def chat_exists?(id) do
-    query = from(c in "chats", where: c.id == ^id)
-
-    exists?(query)
-  end
-
-  def delete_chat(%{:id => id, :title => title}) do
-    case delete(%Chat{id: id, title: title}, returning: false) do
-      {:ok, _} ->
-        :ok
-
-      {:error, c} ->
-        if in_transaction?() do
-          rollback(c)
-        end
-
-        :error
-    end
-  end
-
-  #############
-  ## Private
-  #############
-
-  defp cleanup_in_transaction(events, seconds_treshold) do
+  defp cleanup(:transaction, events, seconds_treshold) do
     ts_now = DateTime.utc_now() |> DateTime.to_unix()
 
     query =
@@ -86,18 +44,18 @@ defmodule DoubleGisMonitor.Database.Repo do
         select: [:uuid]
       )
 
-    outdated_db_events = all(query)
+    outdated_db_events = Db.Repo.all(query)
 
     reduce_fn =
       fn %{:uuid => outdated_uuid}, acc ->
         case Enum.find(events, nil, fn %{:uuid => uuid} -> uuid === outdated_uuid end) do
           nil ->
-            case delete(%Event{uuid: outdated_uuid}, returning: false) do
+            case Db.Repo.delete(%Db.Event{uuid: outdated_uuid}, returning: false) do
               {:ok, s} ->
                 s
 
               {:error, c} ->
-                rollback(c)
+                Db.Repo.rollback(c)
             end
 
             acc + 1
@@ -110,7 +68,7 @@ defmodule DoubleGisMonitor.Database.Repo do
     Enum.reduce(outdated_db_events, 0, reduce_fn)
   end
 
-  def insert_or_update_events_in_transaction(events) when is_list(events) do
+  def insert_or_update(:transaction, events) when is_list(events) do
     events_with_op = for e <- events, do: ensure_inserted?(e)
 
     events_with_op
@@ -129,9 +87,9 @@ defmodule DoubleGisMonitor.Database.Repo do
          } = e
        )
        when is_binary(uuid) do
-    case get(Event, uuid) do
+    case Db.Repo.get(Db.Event, uuid) do
       nil ->
-        insert(e)
+        Db.Repo.insert(e)
         {:insert, e}
 
       %{
@@ -150,7 +108,7 @@ defmodule DoubleGisMonitor.Database.Repo do
             |> Ecto.Changeset.put_change(:dislikes, dislikes)
             |> Ecto.Changeset.put_change(:attachments_count, atch_count)
             |> Ecto.Changeset.put_change(:attachments_list, atch_list)
-            |> update()
+            |> Db.Repo.update()
 
             {:update, e}
 
@@ -162,6 +120,7 @@ defmodule DoubleGisMonitor.Database.Repo do
 
   defp ensure_inserted?(%{} = e) do
     Logger.warning("Event #{inspect(e)} doest not contain required keys!")
-    false
+
+    {:skip, e}
   end
 end

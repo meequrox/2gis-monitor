@@ -1,17 +1,12 @@
-defmodule DoubleGisMonitor.Event.Processor do
+defmodule DoubleGisMonitor.Worker.Processor do
   use Agent
 
   require Logger
 
-  alias DoubleGisMonitor.Database.Repo
-  alias DoubleGisMonitor.Database.Event
-  alias DoubleGisMonitor.Event.Dispatcher
+  alias DoubleGisMonitor.Db
+  alias DoubleGisMonitor.Worker.Dispatcher
 
   @outdate_hours 24
-
-  #############
-  ## API
-  #############
 
   @doc """
   Returns child specification for supervisor.
@@ -46,7 +41,7 @@ defmodule DoubleGisMonitor.Event.Processor do
         true ->
           Logger.info("Database cleanup started")
 
-          case Repo.cleanup(converted_events, @outdate_hours * 3600) do
+          case Db.Utils.Event.cleanup(converted_events, @outdate_hours * 3600) do
             {:ok, n} when is_integer(n) ->
               Logger.info("Deleted #{n} old database entries")
               %{state | first_run: false, last_cleanup: datetime_now}
@@ -63,7 +58,7 @@ defmodule DoubleGisMonitor.Event.Processor do
     Agent.update(__MODULE__, fn _ -> new_state end)
 
     events =
-      Repo.insert_or_update_events(converted_events)
+      Db.Utils.Event.insert_or_update(converted_events)
       |> Map.update(:update, [], fn ex -> ex end)
       |> Map.update(:insert, [], fn ex -> ex end)
 
@@ -77,10 +72,6 @@ defmodule DoubleGisMonitor.Event.Processor do
     )
   end
 
-  #############
-  ## Private
-  #############
-
   defp convert_event_to_db(
          %{
            "id" => id,
@@ -93,7 +84,7 @@ defmodule DoubleGisMonitor.Event.Processor do
          } = e
        )
        when is_integer(ts) and is_map(user_info) do
-    %Event{
+    %Db.Event{
       uuid: id,
       timestamp: ts,
       type: type,
@@ -108,6 +99,6 @@ defmodule DoubleGisMonitor.Event.Processor do
   end
 
   defp convert_event_to_db(_) do
-    %Event{}
+    %Db.Event{}
   end
 end
