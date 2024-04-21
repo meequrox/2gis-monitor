@@ -89,28 +89,37 @@ defmodule DoubleGisMonitor.Db.Utils.Event do
        when is_binary(uuid) do
     case Db.Repo.get(Db.Event, uuid) do
       nil ->
-        Db.Repo.insert(e)
-        {:insert, e}
+        case Db.Repo.insert(e) do
+          {:ok, _} ->
+            {:insert, e}
 
-      %{
-        :comment => db_comment,
-        :likes => db_likes,
-        :dislikes => db_dislikes,
-        :attachments_count => db_atch_count
-      } = db_event ->
-        case db_comment !== comment or db_likes !== likes or db_dislikes !== dislikes or
-               db_atch_count !== atch_count do
+          {:error, c} ->
+            Db.Repo.rollback(c)
+        end
+
+      db_event ->
+        event_updated? =
+          db_event.comment !== comment or db_event.likes !== likes or
+            db_event.dislikes !== dislikes or db_event.attachments_count !== atch_count
+
+        case event_updated? do
           true ->
-            db_event
-            |> Ecto.Changeset.change()
-            |> Ecto.Changeset.put_change(:comment, comment)
-            |> Ecto.Changeset.put_change(:likes, likes)
-            |> Ecto.Changeset.put_change(:dislikes, dislikes)
-            |> Ecto.Changeset.put_change(:attachments_count, atch_count)
-            |> Ecto.Changeset.put_change(:attachments_list, atch_list)
-            |> Db.Repo.update()
+            changeset =
+              db_event
+              |> Ecto.Changeset.change()
+              |> Ecto.Changeset.put_change(:comment, comment)
+              |> Ecto.Changeset.put_change(:likes, likes)
+              |> Ecto.Changeset.put_change(:dislikes, dislikes)
+              |> Ecto.Changeset.put_change(:attachments_count, atch_count)
+              |> Ecto.Changeset.put_change(:attachments_list, atch_list)
 
-            {:update, e}
+            case Db.Repo.update(changeset) do
+              {:ok, _} ->
+                {:update, e}
+
+              {:error, c} ->
+                Db.Repo.rollback(c)
+            end
 
           false ->
             {:skip, e}
