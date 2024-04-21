@@ -13,14 +13,17 @@ defmodule DoubleGisMonitor.Bot.Telegram.Middleware.IgnorePrivateMessages do
   def call(
         %Cnt{
           :update => %Update{
-            :message =>
-              %Message{:from => %User{:id => user_id}, :chat => %Chat{:id => chat_id}} = msg
+            :message => %Message{
+              :from => %User{:id => user_id},
+              :chat => %Chat{:id => chat_id},
+              :text => text
+            }
           }
         } = cnt,
         _opts
       )
-      when user_id !== chat_id do
-    case String.contains?(msg.text, "@" <> cnt.bot_info.username) do
+      when user_id !== chat_id and not is_nil(text) do
+    case String.contains?(text, "@" <> cnt.bot_info.username) do
       true ->
         cnt
 

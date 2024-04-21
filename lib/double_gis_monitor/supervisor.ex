@@ -33,7 +33,11 @@ defmodule DoubleGisMonitor.Supervisor do
       DoubleGisMonitor.Database.Repo,
       ExGram,
       {DoubleGisMonitor.Bot.Telegram,
-       [method: :polling, token: Application.fetch_env!(:ex_gram, :token)]},
+       [
+         method: :polling,
+         allowed_updates: ["message"],
+         token: Application.fetch_env!(:ex_gram, :token)
+       ]},
       DoubleGisMonitor.Event.Poller,
       DoubleGisMonitor.Event.Processor
     ]

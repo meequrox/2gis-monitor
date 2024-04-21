@@ -8,6 +8,7 @@ defmodule DoubleGisMonitor.Database.Repo do
   require Logger
 
   alias DoubleGisMonitor.Database.Event
+  alias DoubleGisMonitor.Database.Chat
 
   #############
   ## API
@@ -37,6 +38,41 @@ defmodule DoubleGisMonitor.Database.Repo do
     end
   end
 
+  def add_chat(id, title) do
+    case get(Chat, id) do
+      nil ->
+        insert(%Chat{id: id, title: title})
+
+      db_chat ->
+        db_chat
+        |> Ecto.Changeset.change()
+        |> Ecto.Changeset.put_change(:title, title)
+        |> update()
+    end
+  end
+
+  def get_chats(), do: all(Chat)
+
+  def chat_exists?(id) do
+    query = from(c in "chats", where: c.id == ^id)
+
+    exists?(query)
+  end
+
+  def delete_chat(%{:id => id, :title => title}) do
+    case delete(%Chat{id: id, title: title}, returning: false) do
+      {:ok, _} ->
+        :ok
+
+      {:error, c} ->
+        if in_transaction?() do
+          rollback(c)
+        end
+
+        :error
+    end
+  end
+
   #############
   ## Private
   #############
@@ -53,10 +89,10 @@ defmodule DoubleGisMonitor.Database.Repo do
     outdated_db_events = all(query)
 
     reduce_fn =
-      fn s, acc ->
-        case Enum.find(events, nil, fn %{:uuid => uuid} -> uuid === s.uuid end) do
+      fn %{:uuid => outdated_uuid}, acc ->
+        case Enum.find(events, nil, fn %{:uuid => uuid} -> uuid === outdated_uuid end) do
           nil ->
-            case delete(%Event{uuid: s.uuid}, returning: false) do
+            case delete(%Event{uuid: outdated_uuid}, returning: false) do
               {:ok, s} ->
                 s
 

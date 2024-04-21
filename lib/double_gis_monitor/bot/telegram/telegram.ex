@@ -10,79 +10,80 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   alias DoubleGisMonitor.Bot.Telegram.Middleware
   alias DoubleGisMonitor.Event.Poller
   alias DoubleGisMonitor.Event.Processor
+  alias DoubleGisMonitor.Database.Chat, as: DbChat
   alias DoubleGisMonitor.Database.Event
   alias DoubleGisMonitor.Database.Repo
-  alias ExGram.Model
+  alias ExGram.Cnt
+  alias ExGram.Error
 
   command("start", description: "Start polling events")
+  command("stop", description: "Stop polling events")
   command("help", description: "Print the bot's help")
   command("info", description: "Print current service status")
 
   middleware(Middleware.IgnorePrivateMessages)
 
   def init(_opts) do
-    sticker = "CAACAgIAAxkBAAEq9l9mJAEHn6OZOrDIubls8uoa4dPkXgAChRYAAq4CEEo2ULUhfmVsyTQE"
-
-    # TODO: get chats from database
-    chats = []
-
-    Enum.each(chats, fn id -> ExGram.send_sticker!(id, sticker) end)
+    Repo.transaction(fn -> init_in_transaction() end)
   end
 
   def bot(), do: @bot
 
-  def handle(msg, %ExGram.Cnt{:extra => %{:rejected => true} = cnt}) do
+  def handle(msg, %Cnt{:extra => %{:rejected => true} = cnt}) do
     Logger.warning("Message was rejected by middleware: #{inspect(msg)}")
 
     cnt
   end
 
-  def handle(
-        {:command, "start@" <> _b, %Model.Message{:chat => %Model.Chat{:id => chat_id}}},
-        cnt
-      ) do
+  def handle({:command, "start@" <> _b, _msg}, cnt) do
     reply =
-      "Hi! This bot will perform the distribution of event updates on the 2GIS map in this chat."
+      "Now bot will perform the distribution of event updates on the 2GIS map in this chat."
 
-    # TODO: add chat to database (or remove if 403)
-    ExGram.send_message!(chat_id, reply)
+    Repo.add_chat(cnt.update.message.chat.id, cnt.update.message.chat.title)
 
-    cnt
+    answer(cnt, reply)
   end
 
-  def handle(
-        {:command, "info@" <> _b, %Model.Message{:chat => %Model.Chat{:id => chat_id}}},
-        cnt
-      ) do
-    %{city: city, layers: layers, interval: interval} = Agent.get(Poller, fn map -> map end)
-    %{last_cleanup: last_cleanup} = Agent.get(Processor, fn map -> map end)
-
+  def handle({:command, "stop@" <> _b, _msg}, cnt) do
     reply =
-      "City: #{String.capitalize(city)}" <>
-        "\nLayers: `#{layers}`" <>
-        "\nInterval: #{trunc(interval / 1000)} seconds" <>
-        "\nEvents in database: #{Repo.aggregate(Event, :count)}" <>
-        "\nLast database cleanup: #{DateTime.diff(DateTime.utc_now(), last_cleanup, :hour)} hours ago"
+      "Now bot will stop sending event updates on the 2GIS map in this chat."
 
-    ExGram.send_message!(chat_id, reply, parse_mode: "MarkdownV2")
+    case Repo.get(DbChat, cnt.update.message.chat.id) do
+      nil ->
+        :ok
 
-    cnt
+      chat ->
+        Repo.delete_chat(chat)
+    end
+
+    answer(cnt, reply)
   end
 
-  def handle(
-        {:command, "help@" <> _b, %Model.Message{:chat => %Model.Chat{:id => chat_id}}},
-        %ExGram.Cnt{:bot_info => %Model.User{:username => bot_username}} = cnt
-      ) do
-    map_fn =
-      fn %Model.BotCommand{:command => cmd, :description => desc} ->
-        "/#{cmd}@#{bot_username} - #{desc}"
-      end
+  def handle({:command, "info@" <> _b, _msg}, cnt) do
+    status =
+      Agent.get(Poller, fn m -> m end)
+      |> Map.merge(Agent.get(Processor, fn m -> m end))
+      |> prepare_status(cnt)
 
-    reply = ExGram.get_my_commands!() |> Enum.map(map_fn) |> Enum.join("\n")
+    reply =
+      "Active in this chat: #{status.active}\n" <>
+        "City: #{status.city}\n" <>
+        "Layers: #{status.layers}\n" <>
+        "Interval: #{status.interval} seconds\n" <>
+        "Events in database: #{status.events_count}\n" <>
+        "Last database cleanup: #{status.last_cleanup} hours ago"
 
-    ExGram.send_message!(chat_id, reply)
+    answer(cnt, reply)
+  end
 
-    cnt
+  def handle({:command, "help@" <> _b, _msg}, cnt) do
+    commands =
+      for bc <- ExGram.get_my_commands!(),
+          do: "/#{bc.command}@#{cnt.bot_info.username} - #{bc.description}"
+
+    reply = Enum.join(commands, "\n")
+
+    answer(cnt, reply)
   end
 
   def handle(msg, cnt) do
@@ -90,4 +91,38 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
     cnt
   end
+
+  defp init_in_transaction() do
+    sticker = "CAACAgIAAxkBAAEq9l9mJAEHn6OZOrDIubls8uoa4dPkXgAChRYAAq4CEEo2ULUhfmVsyTQE"
+
+    each_fn =
+      fn c ->
+        case ExGram.send_sticker(c.id, sticker) do
+          {:ok, _msg} ->
+            :ok
+
+          {:error, %Error{:message => m}} ->
+            message = m |> Jason.decode!() |> inspect()
+
+            Logger.warning("#{c.title} (#{c.id}): #{message}")
+
+            Repo.delete_chat(c)
+        end
+      end
+
+    Enum.each(Repo.get_chats(), each_fn)
+  end
+
+  defp prepare_status(map, cnt) do
+    map
+    |> Map.put(:active, Repo.chat_exists?(cnt.update.message.chat.id) |> inspect())
+    |> Map.put(:city, String.capitalize(map.city))
+    |> Map.put(:layers, prepare_layers(map.layers))
+    |> Map.put(:interval, trunc(map.interval / 1000))
+    |> Map.put(:last_cleanup, DateTime.diff(DateTime.utc_now(), map.last_cleanup, :hour))
+    |> Map.put(:events_count, Repo.aggregate(Event, :count))
+  end
+
+  defp prepare_layers(layers),
+    do: layers |> String.slice(1..-2//1) |> String.replace("\"", "")
 end
