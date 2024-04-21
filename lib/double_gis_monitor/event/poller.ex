@@ -67,9 +67,9 @@ defmodule DoubleGisMonitor.Event.Poller do
   end
 
   defp poll() do
-    %{city: city, layers: layers, interval: interval} = Agent.get(__MODULE__, fn map -> map end)
+    state = Agent.get(__MODULE__, fn m -> m end)
 
-    params = %{project: city, layers: layers}
+    params = %{project: state.city, layers: state.layers}
     url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/layers/user", params)
 
     Logger.info("Request parameters: #{inspect(params)}")
@@ -83,7 +83,7 @@ defmodule DoubleGisMonitor.Event.Poller do
         Logger.error("Couldn't get a list of events. Stop trying until the next timer fires")
     end
 
-    wait(interval)
+    wait(state.interval)
   end
 
   defp fetch_events(url) when is_binary(url) do

@@ -88,8 +88,7 @@ defmodule DoubleGisMonitor.Database.Repo do
            :dislikes => dislikes,
            :attachments_count => atch_count,
            :attachments_list => atch_list
-         } =
-           e
+         } = e
        )
        when is_binary(uuid) do
     case get(Event, uuid) do

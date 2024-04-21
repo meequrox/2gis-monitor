@@ -34,7 +34,7 @@ defmodule DoubleGisMonitor.Event.Processor do
   end
 
   def process(events) when is_list(events) do
-    state = Agent.get(__MODULE__, fn map -> map end)
+    state = Agent.get(__MODULE__, fn m -> m end)
     datetime_now = DateTime.utc_now()
 
     converted_events = events |> Enum.map(fn e -> convert_event_to_db(e) end)

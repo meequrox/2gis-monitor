@@ -3,24 +3,24 @@ defmodule DoubleGisMonitor.Bot.Telegram.Middleware.IgnorePrivateMessages do
 
   require Logger
 
-  alias ExGram.Model
+  alias ExGram.Model.User
+  alias ExGram.Model.Update
+  alias ExGram.Model.Message
+  alias ExGram.Model.Chat
+  alias ExGram.Cnt
 
   @impl true
   def call(
-        %ExGram.Cnt{
-          :bot_info => %Model.User{:username => bot_username},
-          :update => %Model.Update{
-            :message => %Model.Message{
-              :from => %Model.User{:id => user_id},
-              :chat => %Model.Chat{:id => chat_id},
-              :text => "/" <> cmd
-            }
+        %Cnt{
+          :update => %Update{
+            :message =>
+              %Message{:from => %User{:id => user_id}, :chat => %Chat{:id => chat_id}} = msg
           }
         } = cnt,
         _opts
       )
       when user_id !== chat_id do
-    case String.contains?(cmd, "@" <> bot_username) do
+    case String.contains?(msg.text, "@" <> cnt.bot_info.username) do
       true ->
         cnt
 
