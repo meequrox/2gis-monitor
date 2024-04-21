@@ -72,7 +72,7 @@ defmodule DoubleGisMonitor.Event.Poller do
     params = %{project: city, layers: layers}
     url = HTTPoison.Base.build_request_url("https://tugc.2gis.com/1.0/layers/user", params)
 
-    Logger.info("Poll parameters: #{inspect(params)}")
+    Logger.info("Request parameters: #{inspect(params)}")
 
     case fetch_events(url) do
       {:ok, events} ->

@@ -8,6 +8,8 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   require Logger
 
   alias DoubleGisMonitor.Bot.Telegram.Middleware
+  alias DoubleGisMonitor.Database.Event
+  alias DoubleGisMonitor.Database.Repo
   alias ExGram.Model
 
   command("start")
@@ -51,14 +53,15 @@ defmodule DoubleGisMonitor.Bot.Telegram do
         cnt
       ) do
     %{city: city, layers: layers, interval: interval} =
-      Agent.get(DoubleGisMonitor.Event.Poller, fn map -> map end)
+      Agent.get(Event.Poller, fn map -> map end)
 
-    %{last_cleanup: last_cleanup} = Agent.get(DoubleGisMonitor.Event.Processor, fn map -> map end)
+    %{last_cleanup: last_cleanup} = Agent.get(Event.Processor, fn map -> map end)
 
     reply =
       "City: #{String.capitalize(city)}" <>
         "\nLayers: `#{layers}`" <>
         "\nInterval: #{trunc(interval / 1000)} seconds" <>
+        "\nEvents in database: #{%Event{} |> Repo.all() |> Enum.count()}" <>
         "\nLast database cleanup: #{DateTime.diff(DateTime.utc_now(), last_cleanup, :hour)} hours ago"
 
     ExGram.send_message!(chat_id, reply, parse_mode: "MarkdownV2")
