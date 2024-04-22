@@ -41,7 +41,10 @@ defmodule DoubleGisMonitor.Worker.Poller do
   end
 
   def wait() do
-    Process.sleep(2000)
+    delay = 2000
+    Logger.info("Sleeping #{delay} ms before start polling")
+
+    Process.sleep(delay)
     poll()
   end
 

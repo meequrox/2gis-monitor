@@ -23,7 +23,9 @@ defmodule DoubleGisMonitor.Bot.Tg do
   middleware(Middleware.IgnorePm)
 
   def init(_opts) do
-    Db.Repo.transaction(fn -> init_in_transaction() end)
+    sticker = "CAACAgIAAxkBAAEq9l9mJAEHn6OZOrDIubls8uoa4dPkXgAChRYAAq4CEEo2ULUhfmVsyTQE"
+
+    Db.Repo.transaction(fn -> init(:transaction, sticker) end)
   end
 
   def bot(), do: @bot
@@ -89,17 +91,17 @@ defmodule DoubleGisMonitor.Bot.Tg do
     [reset_password: pass] = Application.fetch_env!(:double_gis_monitor, :tg_bot)
 
     if msg.text == pass do
-      case Db.Utils.Event.reset() do
-        {:ok, result} ->
-          Logger.info("Reset events successfully: #{inspect(result)}")
+      case [Db.Utils.Event.reset(), Db.Utils.Message.reset()] do
+        [{:ok, result1}, {:ok, result2}] ->
+          Logger.info("Reset events successfully: #{inspect(result1)} . . . #{inspect(result2)}")
 
           %{:id => poller_id} = DoubleGisMonitor.Worker.Poller.child_spec()
 
           Supervisor.terminate_child(DoubleGisMonitor.Application.Supervisor, poller_id)
           Supervisor.restart_child(DoubleGisMonitor.Application.Supervisor, poller_id)
 
-        {:error, error} ->
-          Logger.error("Events reset failed error: #{inspect(error)}")
+        [result1, result2] ->
+          Logger.error("Events reset failed error: #{inspect(result1)} . . . #{inspect(result2)}")
       end
     end
 
@@ -112,12 +114,10 @@ defmodule DoubleGisMonitor.Bot.Tg do
     cnt
   end
 
-  defp init_in_transaction() do
-    sticker = "CAACAgIAAxkBAAEq9l9mJAEHn6OZOrDIubls8uoa4dPkXgAChRYAAq4CEEo2ULUhfmVsyTQE"
-
+  defp init(:transaction, sticker_id) do
     each_fn =
       fn c ->
-        case ExGram.send_sticker(c.id, sticker) do
+        case ExGram.send_sticker(c.id, sticker_id) do
           {:ok, _msg} ->
             :ok
 

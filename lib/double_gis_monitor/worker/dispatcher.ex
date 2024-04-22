@@ -26,6 +26,8 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
         chat_fn =
           fn %{:id => _id} ->
             # TODO: update message
+            # ExGram.edit_message_text()
+            # ExGram.edit_message_caption()
 
             Process.sleep(3000)
           end
@@ -37,47 +39,55 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
   end
 
   def dispatch_inserts(events) do
-    text_fn =
-      fn e ->
-        text = prepare_text(e)
-        media = build_media(e, text)
+    active_chats = Db.Utils.Chat.all()
 
-        chat_fn =
-          fn %{:id => id} ->
-            Process.sleep(3000)
+    event_fn =
+      fn event ->
+        text = prepare_text(event)
+        media = build_media(event, text)
 
-            link_preview_opts = %Model.LinkPreviewOptions{is_disabled: true}
-            send_opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
-
-            result =
-              case e.attachments_count do
-                0 ->
-                  ExGram.send_message(id, text, send_opts)
-
-                _ ->
-                  ExGram.send_media_group(id, media)
-              end
-
-            case result do
-              {:ok, message} when is_map(message) ->
-                # Repo.add_message()
-                Logger.info("Message #{message.message_id} was linked with event #{e.uuid}")
-
-              {:ok, messages} when is_list(messages) ->
-                # Repo.add_messages()
-                ids = Enum.map(messages, fn m -> m.message_id end)
-
-                Logger.info("Messages #{inspect(ids)} were linked with event #{e.uuid}")
-
-              {:error, error} ->
-                Logger.error("Failed to send new message to chat #{id}: #{inspect(error)}")
-            end
-          end
-
-        Enum.each(Db.Utils.Chat.all(), chat_fn)
+        chat_fn = fn %{:id => chat_id} -> dispatch_event(chat_id, event, {text, media}) end
+        Enum.each(active_chats, chat_fn)
       end
 
-    Enum.each(events, text_fn)
+    Enum.each(events, event_fn)
+  end
+
+  defp dispatch_event(chat_id, event, {text, media}) do
+    case send_event_message(chat_id, event, {text, media}) do
+      {:ok, messages} when is_list(messages) ->
+        message_ids = Enum.map(messages, fn m -> m.message_id end)
+
+        case Db.Utils.Message.insert_or_update(event.uuid, chat_id, message_ids) do
+          {:ok, res} ->
+            Logger.info("Link created: #{inspect(res)}")
+
+          {:error, c} ->
+            # TODO: Log error
+            c
+        end
+
+      {:error, error} ->
+        Logger.error("Failed to send new message to chat #{chat_id}: #{inspect(error)}")
+    end
+  end
+
+  defp send_event_message(chat_id, event, {text, media}) do
+    link_preview_opts = %Model.LinkPreviewOptions{is_disabled: true}
+    send_opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
+
+    Process.sleep(500)
+
+    case event.attachments_count do
+      0 ->
+        case ExGram.send_message(chat_id, text, send_opts) do
+          {:ok, msg} -> {:ok, [msg]}
+          {:error, err} -> {:error, err}
+        end
+
+      _ ->
+        ExGram.send_media_group(chat_id, media)
+    end
   end
 
   defp prepare_text(event) do

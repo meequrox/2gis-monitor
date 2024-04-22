@@ -52,6 +52,11 @@ defmodule DoubleGisMonitor.Db.Utils.Event do
           nil ->
             case Db.Repo.delete(%Db.Event{uuid: outdated_uuid}, returning: false) do
               {:ok, s} ->
+                outdated_messages = Db.Utils.Message.get(outdated_uuid)
+
+                # ExGram.delete_message(chat_id, id)
+                Logger.warning("TODO: process #{inspect(outdated_messages)}")
+
                 s
 
               {:error, c} ->
