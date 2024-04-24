@@ -3,94 +3,165 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   @api_uri "tugc.2gis.com"
 
-  def call() do
+  def fetch() do
+    case fetch_events() do
+      {:ok, events} ->
+        fetch_attachments(events)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def fetch_events() do
     with {:ok, url} <- build_request_url(:events),
          {:ok, headers} <- build_request_headers(),
          {:ok, events} <- request_events(url, headers) do
-      ack(events)
+      Logger.info("Received #{Enum.count(events)} events from server")
+      {:ok, events}
+    else
+      {:error, {:build_request_url, :missing_fetch_config}} ->
+        Logger.error("There is no configuration for fetching. See config/fetch.exs file.")
+        {:error, :config}
+
+      {:error, {:request_events, {:get, reason}}} ->
+        Logger.error("GET request failed: #{inspect(reason)}.")
+        {:error, :request}
+
+      {:error, {:request_events, {:get, err_code, err_url}}} ->
+        Logger.error("Received #{err_code} response from #{err_url}.")
+        {:error, :response}
+
+      {:error, {:request_events, {:decode, tok, pos}}} ->
+        Logger.error("Received invalid JSON: token #{inspect(tok)} at position #{pos}.")
+        {:error, :decode}
+
+      other ->
+        Logger.critical("Unhandled result: #{inspect(other)}")
+        {:error, :undefined}
     end
-
-    # TODO check for errors ^
-    # TODO better logging close to the error moment
   end
 
-  defp ack(events) do
-    Logger.info("Received #{Enum.count([events])} events from server")
-
-    events
+  defp request_events(url, headers) when is_binary(url) and is_list(headers) do
+    request_events(url, headers, 0)
   end
 
-  defp request_events(url, headers) do
+  defp request_events(url, headers, attempt)
+       when is_binary(url) and is_list(headers) and is_integer(attempt) do
+    request_delay = 100
+    retry_delay = 1500
+
+    Process.sleep(request_delay)
+
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
-         {:ok, events} <- Jason.decode(resp.body),
-         {:ok, extended_events} <- include_attachments(events) do
-      {:ok, extended_events}
+         {:ok, events} <- Jason.decode(resp.body) do
+      {:ok, events}
     else
-      # TODO retry
       {:error, %HTTPoison.Error{:reason => reason}} ->
-        {:error, {:request_events, {:get, reason}}}
+        case attempt do
+          3 ->
+            {:error, {:request_events, {:get, reason}}}
 
-      # TODO retry
+          below ->
+            Logger.warning("GET request to #{url} failed. Retrying...")
+            Process.sleep(retry_delay)
+
+            request_events(url, headers, below + 1)
+        end
+
       {:error, {:ensure_good_response, err_code, err_url}} ->
-        {:error, {:request_events, {:get, err_code, err_url}}}
+        case attempt do
+          3 ->
+            {:error, {:request_events, {:get, err_code, err_url}}}
+
+          below ->
+            Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
+            Process.sleep(retry_delay)
+
+            request_events(url, headers, below + 1)
+        end
 
       {:error, %Jason.DecodeError{:token => tok, :position => pos}} ->
         {:error, {:request_events, {:decode, tok, pos}}}
 
       other ->
-        Logger.critical("Unhandled result: #{inspect(other)}")
-        {:error, {:request_events, :undefined}}
+        other
     end
   end
 
-  defp ensure_good_response(%{:status_code => code, :request_url => url}) do
-    case code do
-      200 ->
-        {:ok, 200}
-
-      other ->
-        {:error, {:ensure_good_response, other, url}}
-    end
-  end
-
-  defp include_attachments(events) do
+  def fetch_attachments(events) when is_list(events) do
     result =
       for event <- events do
         with {:ok, url} <- build_request_url(:attachments, event),
              {:ok, headers} <- build_request_headers(),
-             {:ok, attachments} <- request_attachments(url, headers) do
-          Map.put(event, "attachments", attachments)
+             {:ok, {count, list}} <- request_attachments(url, headers) do
+          Map.put(event, "attachments", {count, list})
         end
       end
 
     {:ok, result}
   end
 
-  defp request_attachments(url, headers) do
+  defp request_attachments(url, headers) when is_binary(url) and is_list(headers) do
+    request_attachments(url, headers, 0)
+  end
+
+  defp request_attachments(url, headers, attempt)
+       when is_binary(url) and is_list(headers) and is_integer(attempt) do
+    request_delay = 200
+    retry_delay = 1000
+
+    Process.sleep(request_delay)
+
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
-         {:ok, attachments} <- Jason.decode(resp.body) do
-      {:ok, attachments}
+         {:ok, list} <- Jason.decode(resp.body) do
+      count = Enum.count(list)
+      {:ok, {count, list}}
     else
-      # TODO retry
       {:error, %HTTPoison.Error{:reason => _reason}} ->
-        {:ok, {0, []}}
+        case attempt do
+          3 ->
+            {:ok, {0, []}}
+
+          below ->
+            Logger.warning("GET request to #{url} failed. Retrying...")
+            Process.sleep(retry_delay)
+
+            request_attachments(url, headers, below + 1)
+        end
 
       {:error, {:ensure_good_response, 204, _url}} ->
+        # There is no attachments for this event
         {:ok, {0, []}}
 
-      # TODO retry
-      {:error, {:ensure_good_response, _other, _err_url}} ->
-        {:ok, {0, []}}
+      {:error, {:ensure_good_response, err_code, err_url}} ->
+        case attempt do
+          3 ->
+            {:ok, {0, []}}
+
+          below ->
+            Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
+            Process.sleep(retry_delay)
+
+            request_attachments(url, headers, below + 1)
+        end
 
       {:error, any} ->
         Logger.error("Failed to request attachments: #{inspect(any)}")
         {:ok, {0, []}}
+    end
+  end
+
+  defp ensure_good_response(%{:status_code => code, :request_url => url})
+       when is_integer(code) and is_binary(url) do
+    case code do
+      200 ->
+        {:ok, 200}
 
       other ->
-        Logger.critical("Unhandled result: #{inspect(other)}")
-        {:ok, {0, []}}
+        {:error, {:ensure_good_response, other, url}}
     end
   end
 
@@ -119,7 +190,9 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
   end
 
   defp build_request_url(:events) do
-    case Application.get_env(:double_gis_monitor, :fetch) do
+    env = Application.get_env(:double_gis_monitor, :fetch, [])
+
+    case Keyword.take(env, [:city, :layers]) do
       [city: city, layers: layers] ->
         params = %{
           project: String.downcase(city),
@@ -130,19 +203,19 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
         {:ok, url}
 
-      nil ->
+      _other ->
         {:error, {:build_request_url, :missing_fetch_config}}
     end
   end
 
-  defp build_request_url(:attachments, %{"id" => id}) do
+  defp build_request_url(:attachments, %{"id" => id}) when is_binary(id) do
     params = %{id: id}
     url = HTTPoison.Base.build_request_url("https://#{@api_uri}/1.0/event/photo", params)
 
     {:ok, url}
   end
 
-  defp convert_layers(layers) do
+  defp convert_layers(layers) when is_list(layers) do
     layers
     |> Enum.uniq()
     |> Enum.filter(fn x -> valid_layer?(x) end)
