@@ -1,9 +1,10 @@
 defmodule DoubleGisMonitor.Worker.Dispatcher do
+  # TODO: migrate to pipeline/dispatch.ex
+
   require Logger
 
   alias DoubleGisMonitor.Worker.Poller
   alias DoubleGisMonitor.Db
-  alias ExGram.Model
 
   def dispatch(events) when is_map(events) do
     dispatcher = Process.spawn(__MODULE__, :dispatch, [:spawned, events], [:link])
@@ -18,12 +19,12 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
   end
 
   def dispatch_updates(events) do
-    msg_fn =
+    msg_fun =
       fn _e ->
         # text = prepare_text(e)
         # media = build_media(e, text)
 
-        chat_fn =
+        chat_fun =
           fn %{:id => _id} ->
             # TODO: update message
             # ExGram.edit_message_text()
@@ -32,25 +33,25 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
             Process.sleep(3000)
           end
 
-        Enum.each(Db.Utils.Chat.all(), chat_fn)
+        Enum.each(Db.Utils.Chat.all(), chat_fun)
       end
 
-    Enum.each(events, msg_fn)
+    Enum.each(events, msg_fun)
   end
 
   def dispatch_inserts(events) do
     active_chats = Db.Utils.Chat.all()
 
-    event_fn =
+    event_fun =
       fn event ->
         text = prepare_text(event)
         media = build_media(event, text)
 
-        chat_fn = fn %{:id => chat_id} -> dispatch_event(chat_id, event, {text, media}) end
-        Enum.each(active_chats, chat_fn)
+        chat_fun = fn %{:id => chat_id} -> dispatch_event(chat_id, event, {text, media}) end
+        Enum.each(active_chats, chat_fun)
       end
 
-    Enum.each(events, event_fn)
+    Enum.each(events, event_fun)
   end
 
   defp dispatch_event(chat_id, event, {text, media}) do
@@ -73,7 +74,8 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
   end
 
   defp send_event_message(chat_id, event, {text, media}) do
-    link_preview_opts = %Model.LinkPreviewOptions{is_disabled: true}
+    # %Model.LinkPreviewOptions{is_disabled: true}
+    link_preview_opts = %{}
     send_opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
 
     Process.sleep(500)
@@ -176,15 +178,14 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
   end
 
   defp build_media(%{:attachments_count => count, :attachments_list => list}, text) do
-    reduce_fn =
+    reduce_fun =
       fn url, acc ->
         case acc do
           0 ->
-            {%Model.InputMediaPhoto{type: "photo", media: url, caption: text, parse_mode: "HTML"},
-             acc + 1}
+            {%{type: "photo", media: url, caption: text, parse_mode: "HTML"}, acc + 1}
 
           _ ->
-            {%Model.InputMediaPhoto{type: "photo", media: url}, acc + 1}
+            {%{type: "photo", media: url}, acc + 1}
         end
       end
 
@@ -193,7 +194,7 @@ defmodule DoubleGisMonitor.Worker.Dispatcher do
         []
 
       _ ->
-        {result, _} = Enum.map_reduce(list, 0, reduce_fn)
+        {result, _} = Enum.map_reduce(list, 0, reduce_fun)
 
         result
     end

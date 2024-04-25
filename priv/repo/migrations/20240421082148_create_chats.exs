@@ -4,7 +4,7 @@ defmodule DoubleGisMonitor.Db.Repo.Migrations.CreateChats do
   def change() do
     create table(:chats, primary_key: false) do
       add(:id, :bigint, primary_key: true)
-      add(:title, :string)
+      add(:username, :string)
     end
   end
 end

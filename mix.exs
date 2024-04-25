@@ -26,10 +26,8 @@ defmodule DoubleGisMonitor.MixProject do
       {:jason, "~> 1.4"},
       {:ecto_sql, "~> 3.11"},
       {:postgrex, "~> 0.17.5"},
-      {:ex_gram, "~> 0.52.2"},
-      {:tesla, "~> 1.9"},
-      {:hackney, "~> 1.20"},
-      {:time_zone_info, "~> 0.7.2"}
+      {:time_zone_info, "~> 0.7.2"},
+      {:telegex, "~> 1.6"}
     ]
   end
 end

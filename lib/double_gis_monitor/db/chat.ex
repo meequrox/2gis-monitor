@@ -4,6 +4,6 @@ defmodule DoubleGisMonitor.Db.Chat do
   @primary_key {:id, :integer, autogenerate: false}
 
   schema "chats" do
-    field(:title, :string)
+    field(:username, :string)
   end
 end

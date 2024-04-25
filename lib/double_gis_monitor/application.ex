@@ -17,18 +17,9 @@ defmodule DoubleGisMonitor.Application do
 
     children = [
       # TODO: reenable childrens
-      DoubleGisMonitor.Db.Repo
-      # {OPQ, name: :telegram_send_limiter},
-      # {OPQ, name: :double_gis_poll_limiter},
-      # ExGram,
-      # {DoubleGisMonitor.Bot.Tg,
-      #  [
-      #    method: :polling,
-      #    allowed_updates: ["message"],
-      #    token: Application.fetch_env!(:ex_gram, :token)
-      #  ]},
-      # DoubleGisMonitor.Worker.Poller,
-      # DoubleGisMonitor.Worker.Processor
+      DoubleGisMonitor.Db.Repo,
+      DoubleGisMonitor.Bot.Telegram
+      # DoubleGisMonitor.Worker.Poller
     ]
 
     opts = [strategy: :one_for_one, name: __MODULE__.Supervisor]

@@ -6,7 +6,7 @@ config(:logger, :console,
   colors: [info: :light_green]
 )
 
-config(:tesla, Tesla.Middleware.Logger, debug: false)
+config(:telegex, caller_adapter: {HTTPoison, [recv_timeout: 5 * 1000]})
 
 import_config("repo.exs")
 import_config("fetch.exs")
