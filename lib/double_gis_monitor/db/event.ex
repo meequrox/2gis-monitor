@@ -9,9 +9,7 @@ defmodule DoubleGisMonitor.Db.Event do
     field(:username, :string)
     field(:coordinates, {:map, :float})
     field(:comment, :string)
-    field(:likes, :integer)
-    field(:dislikes, :integer)
-    field(:attachments_count, :integer)
-    field(:attachments_list, {:array, :string})
+    field(:feedback, {:map, :integer})
+    field(:attachments, :map)
   end
 end

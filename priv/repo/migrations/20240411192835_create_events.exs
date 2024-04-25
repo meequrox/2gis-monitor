@@ -9,10 +9,8 @@ defmodule DoubleGisMonitor.Repo.Migrations.CreateEvents do
       add(:username, :string)
       add(:coordinates, {:map, :float})
       add(:comment, :string)
-      add(:likes, :integer)
-      add(:dislikes, :integer)
-      add(:attachments_count, :integer)
-      add(:attachments_list, {:array, :string})
+      add(:feedback, {:map, :integer})
+      add(:attachments, :map)
     end
   end
 end

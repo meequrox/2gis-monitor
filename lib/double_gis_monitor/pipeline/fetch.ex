@@ -3,7 +3,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   @api_uri "tugc.2gis.com"
 
-  def fetch() do
+  def call() do
     case fetch_events() do
       {:ok, events} ->
         fetch_attachments(events)
@@ -17,7 +17,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
     with {:ok, url} <- build_request_url(:events),
          {:ok, headers} <- build_request_headers(),
          {:ok, events} <- request_events(url, headers) do
-      Logger.info("Received #{Enum.count(events)} events from server")
+      Logger.info("Received #{Enum.count(events)} events from server.")
       {:ok, events}
     else
       {:error, {:build_request_url, :missing_fetch_config}} ->
@@ -116,9 +116,10 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
-         {:ok, list} <- Jason.decode(resp.body) do
-      count = Enum.count(list)
-      {:ok, {count, list}}
+         {:ok, map_list} <- Jason.decode(resp.body) do
+      url_list = Enum.map(map_list, fn %{"url" => url} -> url end)
+
+      {:ok, {Enum.count(url_list), url_list}}
     else
       {:error, %HTTPoison.Error{:reason => _reason}} ->
         case attempt do
@@ -149,7 +150,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
         end
 
       {:error, any} ->
-        Logger.error("Failed to request attachments: #{inspect(any)}")
+        Logger.error("Failed to request attachments: #{inspect(any)}.")
         {:ok, {0, []}}
     end
   end

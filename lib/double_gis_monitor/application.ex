@@ -17,7 +17,7 @@ defmodule DoubleGisMonitor.Application do
 
     children = [
       # TODO: reenable childrens
-      # DoubleGisMonitor.Db.Repo
+      DoubleGisMonitor.Db.Repo
       # {OPQ, name: :telegram_send_limiter},
       # {OPQ, name: :double_gis_poll_limiter},
       # ExGram,
