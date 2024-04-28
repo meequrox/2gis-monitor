@@ -21,7 +21,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
       {:ok, events}
     else
       {:error, {:build_request_url, :missing_fetch_config}} ->
-        Logger.error("There is no configuration for fetching. See config/fetch.exs file.")
+        Logger.error("There is no configuration for fetching. See config/config.exs file.")
         {:error, :config}
 
       {:error, {:request_events, {:get, reason}}} ->

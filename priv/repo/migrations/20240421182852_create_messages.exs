@@ -4,8 +4,9 @@ defmodule DoubleGisMonitor.Db.Repo.Migrations.CreateMessages do
   def change() do
     create table(:messages, primary_key: false) do
       add(:uuid, :string, primary_key: true)
-      add(:chats, {:array, :bigint})
-      add(:messages, {:array, :bigint})
+      add(:type, :string)
+      add(:count, :integer)
+      add(:list, {:array, :bigint})
     end
   end
 end

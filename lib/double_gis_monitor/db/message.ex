@@ -4,7 +4,8 @@ defmodule DoubleGisMonitor.Db.Message do
   @primary_key {:uuid, :string, autogenerate: false}
 
   schema "messages" do
-    field(:chats, {:array, :integer})
-    field(:messages, {:array, :integer})
+    field(:type, :string)
+    field(:count, :integer)
+    field(:list, {:array, :integer})
   end
 end
