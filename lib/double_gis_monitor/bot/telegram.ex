@@ -1,8 +1,6 @@
 defmodule DoubleGisMonitor.Bot.Telegram do
   use Telegex.Polling.GenHandler
 
-  import Ecto.Query, only: [from: 2]
-
   @impl true
   def on_boot() do
     {:ok, true} = Telegex.delete_webhook()
@@ -14,68 +12,59 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     }
   end
 
-  # TODO: code check
-  # TODO: log errors
-  # TODO: catch errors
-
-  # TODO: set commands on init
-
   @impl true
   def on_init(_arg) do
-    file_id = "CAACAgIAAxkBAAErELdmKrow9_NVH6gcudBTW74_YVNoXAAC0xcAArpnmElpOuY9xD_-hzQE"
+    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
+    [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
 
-    each_fun =
-      fn %DoubleGisMonitor.Db.Chat{:id => id} = chat ->
-        Process.sleep(100)
+    Process.sleep(100)
 
-        case Telegex.send_sticker(id, file_id) do
-          {:ok, _message} ->
-            {:ok, id}
+    {:ok, true} =
+      Telegex.set_my_commands([
+        %Telegex.Type.BotCommand{command: "/help", description: "Print all commands"},
+        %Telegex.Type.BotCommand{command: "/info", description: "Print service status"},
+        %Telegex.Type.BotCommand{
+          command: "/reset",
+          description: "Delete all events from database and channel"
+        }
+      ])
 
-          {:error, %Telegex.Error{:error_code => 403}} ->
-            Logger.info("Deleting chat #{id} from DB.")
-            {:ok, _chat} = DoubleGisMonitor.Db.Repo.transaction(fn -> delete_chat(chat) end)
-            {:ok, id}
+    datetime = tz |> DateTime.now() |> Calendar.strftime("%d.%m.%y %H:%M:%S")
+    text = "Polling started at " <> datetime
 
-          {:error, other} ->
-            Logger.error("Failed to send boot message to #{id}: #{inspect(other)}.")
-            {:error, id}
-        end
-      end
+    Process.sleep(100)
+    {:ok, _message} = Telegex.send_message(channel_id, text)
 
-    DoubleGisMonitor.Db.Chat
-    |> DoubleGisMonitor.Db.Repo.all()
-    |> Enum.each(each_fun)
+    :ok
   end
 
   @impl true
   def on_update(%Telegex.Type.Update{
-        :message => %Telegex.Type.Message{
-          :text => text,
-          :chat => %Telegex.Type.Chat{:type => "private"} = chat
-        }
+        :message =>
+          %Telegex.Type.Message{
+            :text => text,
+            :chat => %Telegex.Type.Chat{:type => "channel", :id => update_channel_id} = chat
+          } = message
       }) do
-    # TODO: get password from config
-    password = "hello_world"
+    env = Application.get_env(:double_gis_monitor, :dispatch, [])
+    [channel_id: config_channel_id] = Keyword.take(env, [:channel_id])
 
-    case text do
-      "/start " <> ^password ->
-        handle_command(:start, chat)
+    if config_channel_id === update_channel_id do
+      case text do
+        "/help" ->
+          handle_command(:help, chat)
 
-      "/reset " <> ^password ->
-        handle_command(:reset, chat)
+        "/info" ->
+          handle_command(:info, chat)
 
-      "/info" ->
-        handle_command(:info, chat)
+        "/reset" ->
+          handle_command(:reset, chat)
 
-      "/stop" ->
-        handle_command(:stop, chat)
-
-      "/help" ->
-        handle_command(:help, chat)
-
-      _other ->
-        handle_command(:unknown, chat)
+        _other ->
+          Logger.info("Rejected unknown message: #{inspect(message)}")
+      end
+    else
+      Logger.info("Rejected message from foreign channel: #{message}")
     end
   end
 
@@ -84,113 +73,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     Logger.info("Rejected update: #{inspect(update)}")
   end
 
-  defp handle_command(:start, %Telegex.Type.Chat{:id => chat_id, :username => username}) do
-    {:ok, _chat} = DoubleGisMonitor.Db.Repo.transaction(fn -> add_chat(chat_id, username) end)
-
-    reply = "Polling started"
-
-    Process.sleep(100)
-
-    case Telegex.send_message(chat_id, reply) do
-      {:ok, _message} ->
-        :ok
-
-      {:error, error} ->
-        Logger.error("Failed to send reply to #{chat_id}: #{inspect(error)}")
-        :ok
-    end
-  end
-
-  defp handle_command(:reset, %Telegex.Type.Chat{:id => chat_id}) do
-    # TODO: truncate table
-    # {:ok, _chat} = DoubleGisMonitor.Db.Repo.transaction(fn -> reset() end)
-
-    reply = "Database cleaned"
-
-    Process.sleep(100)
-
-    case Telegex.send_message(chat_id, reply) do
-      {:ok, _message} ->
-        :ok
-
-      {:error, error} ->
-        Logger.error("Failed to send reply to #{chat_id}: #{inspect(error)}")
-        :ok
-    end
-  end
-
-  defp handle_command(:info, %Telegex.Type.Chat{:id => chat_id}) do
-    env = Application.get_env(:double_gis_monitor, :fetch, [])
-
-    status =
-      case Keyword.take(env, [:city, :layers, :interval]) do
-        [city: city, layers: layers, interval: interval] ->
-          query = from(c in "chats", where: c.id == ^chat_id)
-
-          %{
-            active: DoubleGisMonitor.Db.Repo.exists?(query) |> inspect(),
-            city: String.capitalize(city),
-            layers: layers |> String.slice(1..-2//1) |> String.replace("\"", ""),
-            interval: trunc(interval / 1000),
-            events_count: DoubleGisMonitor.Db.Repo.aggregate(DoubleGisMonitor.Db.Event, :count)
-          }
-
-        _other ->
-          Logger.error("There is no configuration for fetching. See config/fetch.exs file.")
-
-          %{
-            active: "unknown",
-            city: "unknown",
-            layers: "unknown",
-            interval: "unknown",
-            events_count: "unknown"
-          }
-      end
-
-    reply =
-      "Polling started: #{status.active}\n" <>
-        "City: #{status.city}\n" <>
-        "Layers: #{status.layers}\n" <>
-        "Interval: #{status.interval} seconds\n" <>
-        "Events in database: #{status.events_count}\n"
-
-    Process.sleep(100)
-
-    case Telegex.send_message(chat_id, reply) do
-      {:ok, _message} ->
-        :ok
-
-      {:error, error} ->
-        Logger.error("Failed to send reply to #{chat_id}: #{inspect(error)}")
-        :ok
-    end
-  end
-
-  defp handle_command(:stop, %Telegex.Type.Chat{:id => chat_id}) do
-    {:ok, _chat} =
-      case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Chat, chat_id) do
-        nil ->
-          {:ok, %DoubleGisMonitor.Db.Chat{id: chat_id, username: ""}}
-
-        chat ->
-          DoubleGisMonitor.Db.Repo.transaction(fn -> delete_chat(chat) end)
-      end
-
-    reply = "Polling stopped"
-
-    Process.sleep(100)
-
-    case Telegex.send_message(chat_id, reply) do
-      {:ok, _message} ->
-        :ok
-
-      {:error, error} ->
-        Logger.error("Failed to send reply to #{chat_id}: #{inspect(error)}")
-        :ok
-    end
-  end
-
-  defp handle_command(:help, %Telegex.Type.Chat{:id => chat_id}) do
+  defp handle_command(:help, %Telegex.Type.Chat{:id => channel_id}) do
     {:ok, commands} = Telegex.get_my_commands()
 
     map_fun = fn %Telegex.Type.BotCommand{:command => cmd, :description => desc} ->
@@ -201,43 +84,59 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
     Process.sleep(100)
 
-    case Telegex.send_message(chat_id, reply) do
+    case Telegex.send_message(channel_id, reply) do
       {:ok, _message} ->
         :ok
 
       {:error, error} ->
-        Logger.error("Failed to send reply to #{chat_id}: #{inspect(error)}")
+        Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
+    end
+  end
+
+  defp handle_command(:info, %Telegex.Type.Chat{:id => channel_id}) do
+    env = Application.get_env(:double_gis_monitor, :fetch, [])
+
+    [city: city, layers: layers, interval: interval] =
+      Keyword.take(env, [:city, :layers, :interval])
+
+    status = %{
+      city: String.capitalize(city),
+      layers: layers |> String.slice(1..-2//1) |> String.replace("\"", ""),
+      interval: trunc(interval / 1000),
+      events_count: DoubleGisMonitor.Db.Repo.aggregate(DoubleGisMonitor.Db.Event, :count)
+    }
+
+    reply =
+      "City: #{status.city}\n" <>
+        "Layers: #{status.layers}\n" <>
+        "Interval: #{status.interval} seconds\n" <>
+        "Events in database: #{status.events_count}\n"
+
+    Process.sleep(100)
+
+    case Telegex.send_message(channel_id, reply) do
+      {:ok, _message} ->
         :ok
+
+      {:error, error} ->
+        Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
     end
   end
 
-  defp handle_command(:unknown, message) do
-    Logger.info("Rejected message: #{inspect(message)}")
-  end
+  defp handle_command(:reset, %Telegex.Type.Chat{:id => channel_id}) do
+    # TODO: query and delete all linked messages
+    # TODO: truncate table messages (transaction)
+    # TODO: truncate table events (transaction)
+    # {:ok, _chat} = DoubleGisMonitor.Db.Repo.transaction(fn -> reset() end)
 
-  defp add_chat(id, username) do
-    result =
-      case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Chat, id) do
-        nil ->
-          DoubleGisMonitor.Db.Repo.insert(%DoubleGisMonitor.Db.Chat{id: id, username: username})
+    Process.sleep(100)
 
-        db_chat ->
-          db_chat
-          |> Ecto.Changeset.change()
-          |> Ecto.Changeset.put_change(:username, username)
-          |> DoubleGisMonitor.Db.Repo.update()
-      end
+    case Telegex.send_message(channel_id, "Database cleaned") do
+      {:ok, _message} ->
+        :ok
 
-    case result do
-      {:ok, struct} -> {:ok, struct}
-      {:error, changeset} -> DoubleGisMonitor.Db.Repo.rollback(changeset)
-    end
-  end
-
-  defp delete_chat(chat) when is_map(chat) do
-    case DoubleGisMonitor.Db.Repo.delete(chat, returning: false) do
-      {:ok, _struct} -> {:ok, chat}
-      {:error, changeset} -> DoubleGisMonitor.Db.Repo.rollback(changeset)
+      {:error, error} ->
+        Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
     end
   end
 end
