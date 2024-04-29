@@ -4,7 +4,7 @@ defmodule DoubleGisMonitor.MixProject do
   def project do
     [
       app: :double_gis_monitor,
-      version: "1.0.0",
+      version: "1.0.1",
       elixir: "~> 1.11",
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -27,7 +27,8 @@ defmodule DoubleGisMonitor.MixProject do
       {:ecto_sql, "~> 3.11"},
       {:postgrex, "~> 0.17.5"},
       {:time_zone_info, "~> 0.7.2"},
-      {:telegex, "~> 1.6"}
+      {:telegex, "~> 1.6"},
+      {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
     ]
   end
 end

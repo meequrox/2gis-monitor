@@ -1,4 +1,8 @@
 defmodule DoubleGisMonitor.Db.Message do
+  @moduledoc """
+  TODO: moduledoc
+  """
+
   use Ecto.Schema
 
   @primary_key {:uuid, :string, autogenerate: false}

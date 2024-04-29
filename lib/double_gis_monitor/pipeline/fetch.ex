@@ -1,4 +1,8 @@
 defmodule DoubleGisMonitor.Pipeline.Fetch do
+  @moduledoc """
+  TODO: moduledoc
+  """
+
   require Logger
 
   @api_uri "tugc.2gis.com"

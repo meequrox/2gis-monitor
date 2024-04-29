@@ -1,4 +1,8 @@
 defmodule DoubleGisMonitor.Bot.Telegram do
+  @moduledoc """
+  TODO: moduledoc
+  """
+
   use Telegex.Polling.GenHandler
 
   @send_delay 1100
@@ -147,6 +151,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
         "/" <> cmd <> " - " <> desc
       end
 
-    commands |> Enum.map(map_fun) |> Enum.join("\n")
+    Enum.map_join(commands, "\n", map_fun)
   end
 end

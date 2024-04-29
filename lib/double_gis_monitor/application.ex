@@ -26,6 +26,8 @@ defmodule DoubleGisMonitor.Application do
       # DoubleGisMonitor.Worker.Poller
     ]
 
+    # TODO: Do not run children in test env
+
     opts = [strategy: :one_for_one, name: __MODULE__.Supervisor]
     Supervisor.start_link(children, opts)
   end

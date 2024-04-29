@@ -1,4 +1,8 @@
 defmodule DoubleGisMonitor.Pipeline.Process do
+  @moduledoc """
+  TODO: moduledoc
+  """
+
   require Logger
 
   import Ecto.Query, only: [from: 2]
@@ -72,6 +76,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
+  # TODO: Function body is nested too deep (max depth is 2, was 3)
   defp insert_or_update_event(
          %DoubleGisMonitor.Db.Event{
            :uuid => uuid,
@@ -218,6 +223,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     {:ok, result}
   end
 
+  # TODO: Function is too complex
   defp convert_event_to_db(
          %{
            "id" => id,

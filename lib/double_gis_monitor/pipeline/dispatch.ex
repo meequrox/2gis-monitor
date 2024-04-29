@@ -1,4 +1,8 @@
 defmodule DoubleGisMonitor.Pipeline.Dispatch do
+  @moduledoc """
+  TODO: moduledoc
+  """
+
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
@@ -31,6 +35,8 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     with {:ok, linked_events} <- link_updates_with_messages(events),
          {:ok, messages} <- update_messages(linked_events) do
       {:ok, messages}
+    else
+      error -> error
     end
   end
 
@@ -78,6 +84,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     {:ok, messages}
   end
 
+  # TODO: Function is too complex
   defp send_event_message(
          channel_id,
          %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
