@@ -15,8 +15,12 @@ defmodule DoubleGisMonitor.Application do
   def start(_type, _args) do
     Logger.info("App started, cwd: #{File.cwd!()}")
 
+    # TODO: Worker to run pipeline every $interval seconds
+    # {:ok, a} = DoubleGisMonitor.Pipeline.Fetch.call()
+    # {:ok, b} = DoubleGisMonitor.Pipeline.Process.call(a)
+    # {:ok, c} = DoubleGisMonitor.Pipeline.Dispatch.call(b)
+
     children = [
-      # TODO: reenable childrens
       DoubleGisMonitor.Db.Repo,
       DoubleGisMonitor.Bot.Telegram
       # DoubleGisMonitor.Worker.Poller
