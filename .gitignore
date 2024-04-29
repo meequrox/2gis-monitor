@@ -36,4 +36,4 @@ webrtp-*.tar
 Mnesia.*@*/
 
 # Private config
-config/private.exs
+# config/private.exs
