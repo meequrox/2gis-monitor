@@ -2,6 +2,8 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
   require Logger
 
   @api_uri "tugc.2gis.com"
+  @request_delay 150
+  @retry_delay 1500
 
   def call() do
     case fetch_events() do
@@ -48,10 +50,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   defp request_events(url, headers, attempt)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
-    request_delay = 100
-    retry_delay = 1500
-
-    Process.sleep(request_delay)
+    Process.sleep(@request_delay)
 
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
@@ -65,7 +64,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
           below ->
             Logger.warning("GET request to #{url} failed. Retrying...")
-            Process.sleep(retry_delay)
+            Process.sleep(@retry_delay)
 
             request_events(url, headers, below + 1)
         end
@@ -77,7 +76,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
           below ->
             Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
-            Process.sleep(retry_delay)
+            Process.sleep(@retry_delay)
 
             request_events(url, headers, below + 1)
         end
@@ -109,10 +108,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   defp request_attachments(url, headers, attempt)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
-    request_delay = 200
-    retry_delay = 1000
-
-    Process.sleep(request_delay)
+    Process.sleep(@request_delay)
 
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
@@ -128,7 +124,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
           below ->
             Logger.warning("GET request to #{url} failed. Retrying...")
-            Process.sleep(retry_delay)
+            Process.sleep(@retry_delay)
 
             request_attachments(url, headers, below + 1)
         end
@@ -144,7 +140,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
           below ->
             Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
-            Process.sleep(retry_delay)
+            Process.sleep(@retry_delay)
 
             request_attachments(url, headers, below + 1)
         end

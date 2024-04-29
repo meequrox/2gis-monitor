@@ -1,14 +1,17 @@
 defmodule DoubleGisMonitor.Bot.Telegram do
   use Telegex.Polling.GenHandler
 
+  @send_delay 1100
+
+  defmacro send_delay(), do: @send_delay
+
   @impl true
   def on_boot() do
     {:ok, true} = Telegex.delete_webhook()
 
     %Telegex.Polling.Config{
-      interval: 1000,
-      timeout: 1000,
-      allowed_updates: ["message"]
+      interval: 2000,
+      allowed_updates: ["channel_post"]
     }
   end
 
@@ -17,22 +20,24 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     env = Application.fetch_env!(:double_gis_monitor, :dispatch)
     [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
 
-    Process.sleep(100)
+    Process.sleep(@send_delay)
 
-    {:ok, true} =
-      Telegex.set_my_commands([
-        %Telegex.Type.BotCommand{command: "/help", description: "Print all commands"},
-        %Telegex.Type.BotCommand{command: "/info", description: "Print service status"},
+    commands =
+      [
+        %Telegex.Type.BotCommand{command: "help", description: "Print all commands"},
+        %Telegex.Type.BotCommand{command: "info", description: "Print service status"},
         %Telegex.Type.BotCommand{
-          command: "/reset",
+          command: "reset",
           description: "Delete all events from database and channel"
         }
-      ])
+      ]
 
-    datetime = tz |> DateTime.now() |> Calendar.strftime("%d.%m.%y %H:%M:%S")
-    text = "Polling started at " <> datetime
+    {:ok, true} = Telegex.set_my_commands(commands)
 
-    Process.sleep(100)
+    datetime = tz |> DateTime.now!(TimeZoneInfo.TimeZoneDatabase) |> Calendar.strftime("%H:%M:%S")
+    text = "Bot started at " <> datetime <> "\n\n" <> commands_to_text(commands)
+
+    Process.sleep(@send_delay)
     {:ok, _message} = Telegex.send_message(channel_id, text)
 
     :ok
@@ -40,7 +45,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   @impl true
   def on_update(%Telegex.Type.Update{
-        :message =>
+        :channel_post =>
           %Telegex.Type.Message{
             :text => text,
             :chat => %Telegex.Type.Chat{:type => "channel", :id => update_channel_id} = chat
@@ -64,7 +69,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
           Logger.info("Rejected unknown message: #{inspect(message)}")
       end
     else
-      Logger.info("Rejected message from foreign channel: #{message}")
+      Logger.info("Rejected message from foreign channel: #{inspect(message)}")
     end
   end
 
@@ -76,13 +81,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   defp handle_command(:help, %Telegex.Type.Chat{:id => channel_id}) do
     {:ok, commands} = Telegex.get_my_commands()
 
-    map_fun = fn %Telegex.Type.BotCommand{:command => cmd, :description => desc} ->
-      cmd <> " - " <> desc
-    end
+    reply = commands_to_text(commands)
 
-    reply = commands |> Enum.map(map_fun) |> Enum.join("\n")
-
-    Process.sleep(100)
+    Process.sleep(@send_delay)
 
     case Telegex.send_message(channel_id, reply) do
       {:ok, _message} ->
@@ -101,8 +102,8 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
     status = %{
       city: String.capitalize(city),
-      layers: layers |> String.slice(1..-2//1) |> String.replace("\"", ""),
-      interval: trunc(interval / 1000),
+      layers: inspect(layers),
+      interval: interval,
       events_count: DoubleGisMonitor.Db.Repo.aggregate(DoubleGisMonitor.Db.Event, :count)
     }
 
@@ -112,7 +113,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
         "Interval: #{status.interval} seconds\n" <>
         "Events in database: #{status.events_count}\n"
 
-    Process.sleep(100)
+    Process.sleep(@send_delay)
 
     case Telegex.send_message(channel_id, reply) do
       {:ok, _message} ->
@@ -129,7 +130,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     # TODO: truncate table events (transaction)
     # {:ok, _chat} = DoubleGisMonitor.Db.Repo.transaction(fn -> reset() end)
 
-    Process.sleep(100)
+    Process.sleep(@send_delay)
 
     case Telegex.send_message(channel_id, "Database cleaned") do
       {:ok, _message} ->
@@ -138,5 +139,14 @@ defmodule DoubleGisMonitor.Bot.Telegram do
       {:error, error} ->
         Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
     end
+  end
+
+  defp commands_to_text(commands) when is_list(commands) do
+    map_fun =
+      fn %Telegex.Type.BotCommand{:command => cmd, :description => desc} ->
+        "/" <> cmd <> " - " <> desc
+      end
+
+    commands |> Enum.map(map_fun) |> Enum.join("\n")
   end
 end
