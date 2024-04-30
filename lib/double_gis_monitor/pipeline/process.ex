@@ -171,10 +171,10 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
-  defp delete_outdated_event(event) when is_map(event) do
-    case DoubleGisMonitor.Db.Repo.delete(event, returning: false) do
-      {:ok, _struct} ->
-        event
+  defp delete_outdated_event(%{:uuid => uuid}) do
+    case DoubleGisMonitor.Db.Repo.delete(%DoubleGisMonitor.Db.Event{uuid: uuid}, returning: false) do
+      {:ok, struct} ->
+        struct
 
       {:error, changeset} ->
         DoubleGisMonitor.Db.Repo.rollback({:delete_outdated_event, changeset})
