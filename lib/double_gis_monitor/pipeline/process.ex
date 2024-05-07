@@ -1,12 +1,16 @@
 defmodule DoubleGisMonitor.Pipeline.Process do
   @moduledoc """
-  TODO: moduledoc
+  A pipeline module that receives a list of event maps with binary keys, applies various transformations to them, and then inserts or updates the corresponding database records.
+
+  Before real processing begins, the database is cleaned.
+  If some event in the database was added N hours ago and is no longer displayed on the 2GIS map, it is deleted from the database.
   """
 
   require Logger
 
   import Ecto.Query, only: [from: 2]
 
+  @spec call(list(map())) :: {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(events) when is_list(events), do: process(events)
 
   defp process(events) when is_list(events) do
@@ -76,46 +80,55 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
-  # TODO: Function body is nested too deep (max depth is 2, was 3)
-  defp insert_or_update_event(
-         %DoubleGisMonitor.Db.Event{
-           :uuid => uuid,
-           :comment => comment,
-           :feedback => feedback,
-           :attachments => attachments
-         } = event
-       ) do
+  defp insert_or_update_event(%DoubleGisMonitor.Db.Event{:uuid => uuid} = event)
+       when is_binary(uuid) do
     case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Event, uuid) do
       nil ->
-        case DoubleGisMonitor.Db.Repo.insert(event) do
-          {:ok, _struct} ->
-            {event, :insert}
-
-          {:error, changeset} ->
-            DoubleGisMonitor.Db.Repo.rollback({:insert_or_update_event, changeset})
-        end
+        insert_event(event)
 
       db_event ->
         case different_events?(db_event, event) do
           true ->
-            changeset =
-              db_event
-              |> Ecto.Changeset.change()
-              |> Ecto.Changeset.put_change(:comment, comment)
-              |> Ecto.Changeset.put_change(:feedback, feedback)
-              |> Ecto.Changeset.put_change(:attachments, attachments)
-
-            case DoubleGisMonitor.Db.Repo.update(changeset) do
-              {:ok, _struct} ->
-                {event, :update}
-
-              {:error, changeset} ->
-                DoubleGisMonitor.Db.Repo.rollback({:insert_or_update_event, changeset})
-            end
+            update_event(db_event, event)
 
           false ->
             {event, :skip}
         end
+    end
+  end
+
+  defp insert_event(event) when is_map(event) do
+    case DoubleGisMonitor.Db.Repo.insert(event) do
+      {:ok, _struct} ->
+        {event, :insert}
+
+      {:error, changeset} ->
+        DoubleGisMonitor.Db.Repo.rollback({:insert_or_update_event, changeset})
+    end
+  end
+
+  defp update_event(
+         old_event,
+         %DoubleGisMonitor.Db.Event{
+           :comment => new_comment,
+           :feedback => new_feedback,
+           :attachments => new_attachments
+         } = new_event
+       )
+       when is_binary(new_comment) and is_map(new_feedback) and is_map(new_attachments) do
+    changeset =
+      old_event
+      |> Ecto.Changeset.change()
+      |> Ecto.Changeset.put_change(:comment, new_comment)
+      |> Ecto.Changeset.put_change(:feedback, new_feedback)
+      |> Ecto.Changeset.put_change(:attachments, new_attachments)
+
+    case DoubleGisMonitor.Db.Repo.update(changeset) do
+      {:ok, _struct} ->
+        {new_event, :update}
+
+      {:error, changeset} ->
+        DoubleGisMonitor.Db.Repo.rollback({:insert_or_update_event, changeset})
     end
   end
 
@@ -223,7 +236,6 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     {:ok, result}
   end
 
-  # TODO: Function is too complex
   defp convert_event_to_db(
          %{
            "id" => id,
@@ -236,8 +248,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
          } = event
        )
        when is_binary(id) and is_integer(ts) and is_binary(type) and is_map(user_info) and
-              is_float(lon) and is_float(lat) and is_integer(likes) and is_integer(dislikes) and
-              is_integer(atch_count) and is_list(atch_list) do
+              is_float(lon) and is_float(lat) and is_integer(likes) and is_integer(dislikes) do
     new_event = %DoubleGisMonitor.Db.Event{
       uuid: id,
       timestamp: ts,
@@ -253,6 +264,6 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp convert_event_to_db(_other) do
-    %DoubleGisMonitor.Db.Event{uuid: :invalid}
+    {:ok, %DoubleGisMonitor.Db.Event{uuid: :invalid}}
   end
 end
