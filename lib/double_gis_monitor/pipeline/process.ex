@@ -164,7 +164,8 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp delete_outdated_event_messages(event) when is_map(event) do
-    # TODO: delete TG messages linked to the event
+    # TODO: delete TG messages linked to the event?
+    # Pending question
     [:not, :implemented]
   end
 
