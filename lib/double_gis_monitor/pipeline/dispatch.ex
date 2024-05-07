@@ -1,11 +1,20 @@
 defmodule DoubleGisMonitor.Pipeline.Dispatch do
   @moduledoc """
-  TODO: moduledoc
+  A pipeline module that receives a map of updated and inserted events and sends these changes to the Telegram bot.
+
+  For updated events, simply edit the previous sent message.
+  Due to Telegram's architecture, it is not possible to add new attachments for updated events.
+  As a workaround, an "Updated at ..." title will be added to the top of the updated event message.
+
+  Due to Telegram Bot's API limitations on sending messages in a single channel, it will only send 1 message per second.
+  If the event has attachments, the dispatcher will send a message with them and then sleep for as many seconds as the event has attachments.
   """
 
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
+  @spec call(%{update: list(map()), insert: list(map())}) ::
+          {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(%{:update => updated_events, :insert => inserted_events})
       when is_list(updated_events) and is_list(inserted_events) do
     with {:ok, updated_messages} <- dispatch(:update, updated_events),
@@ -22,7 +31,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     end
   end
 
-  def dispatch(:insert, events) when is_list(events) do
+  defp dispatch(:insert, events) when is_list(events) do
     with {:ok, sent_messages} <- send_messages(events),
          {:ok, inserted_messages} <- insert_messages(sent_messages) do
       {:ok, inserted_messages}
@@ -31,7 +40,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     end
   end
 
-  def dispatch(:update, events) when is_list(events) do
+  defp dispatch(:update, events) when is_list(events) do
     with {:ok, linked_events} <- link_updates_with_messages(events),
          {:ok, messages} <- update_messages(linked_events) do
       {:ok, messages}
@@ -40,7 +49,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     end
   end
 
-  def insert_messages(messages) when is_list(messages) do
+  defp insert_messages(messages) when is_list(messages) do
     transaction_fun =
       fn ->
         for message <- messages do
@@ -84,61 +93,80 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     {:ok, messages}
   end
 
-  # TODO: Function is too complex
   defp send_event_message(
+         channel_id,
+         %DoubleGisMonitor.Db.Event{:attachments => %{:count => attachments_count}} = event
+       )
+       when is_integer(channel_id) and is_integer(attachments_count) do
+    case attachments_count do
+      0 ->
+        send_event_message(:single_message, channel_id, event)
+
+      _greater ->
+        send_event_message(:media_group, channel_id, event)
+    end
+  end
+
+  defp send_event_message(
+         :single_message,
          channel_id,
          %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
            event
        )
        when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) do
     link_preview_opts = %Telegex.Type.LinkPreviewOptions{is_disabled: true}
+    opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
 
+    text = prepare_text(event)
+
+    Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
+
+    case Telegex.send_message(channel_id, text, opts) do
+      {:ok, %Telegex.Type.Message{:message_id => message_id}} ->
+        db_message = %DoubleGisMonitor.Db.Message{
+          uuid: uuid,
+          type: "text",
+          count: 1,
+          list: [message_id]
+        }
+
+        {:ok, db_message}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  defp send_event_message(
+         :media_group,
+         channel_id,
+         %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
+           event
+       )
+       when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) do
     text = prepare_text(event)
     media = build_media(event, text)
 
-    case attachments_count do
-      0 ->
-        opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
+    Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
 
+    case Telegex.send_media_group(channel_id, media) do
+      {:ok, messages} ->
+        list =
+          for %Telegex.Type.Message{:message_id => message_id} <- messages, do: message_id
+
+        db_message = %DoubleGisMonitor.Db.Message{
+          uuid: uuid,
+          type: "caption",
+          count: attachments_count,
+          list: list
+        }
+
+        Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay() * (attachments_count - 1))
+        {:ok, db_message}
+
+      {:error, error} ->
         Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
-
-        case Telegex.send_message(channel_id, text, opts) do
-          {:ok, %Telegex.Type.Message{:message_id => message_id}} ->
-            db_message = %DoubleGisMonitor.Db.Message{
-              uuid: uuid,
-              type: "text",
-              count: 1,
-              list: [message_id]
-            }
-
-            {:ok, db_message}
-
-          {:error, error} ->
-            {:error, error}
-        end
-
-      count ->
-        Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
-
-        case Telegex.send_media_group(channel_id, media) do
-          {:ok, messages} ->
-            list =
-              for %Telegex.Type.Message{:message_id => message_id} <- messages, do: message_id
-
-            db_message = %DoubleGisMonitor.Db.Message{
-              uuid: uuid,
-              type: "caption",
-              count: count,
-              list: list
-            }
-
-            Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay() * (count - 1))
-            {:ok, db_message}
-
-          {:error, error} ->
-            Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
-            {:error, error}
-        end
+        {:error, error}
     end
   end
 
@@ -177,7 +205,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     end
   end
 
-  def update_messages(events) when is_list(events) do
+  defp update_messages(events) when is_list(events) do
     env = Application.fetch_env!(:double_gis_monitor, :dispatch)
     [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
 
