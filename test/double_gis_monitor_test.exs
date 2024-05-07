@@ -3,7 +3,7 @@ defmodule DoubleGisMonitorTest do
   doctest DoubleGisMonitor
 
   test "Dummy event building" do
-    e = %DoubleGisMonitor.Event{}
+    e = %DoubleGisMonitor.Db.Event{}
     assert(e.uuid == nil)
   end
 end

@@ -19,6 +19,8 @@ config(:double_gis_monitor,
   ecto_repos: [DoubleGisMonitor.Db.Repo]
 )
 
+config(:double_gis_monitor, :env, config_env())
+
 config(:telegex, caller_adapter: {HTTPoison, [recv_timeout: 5 * 1000]})
 
 # TODO: document all :double_gis_monitor options

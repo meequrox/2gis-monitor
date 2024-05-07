@@ -15,18 +15,26 @@ defmodule DoubleGisMonitor.Application do
   def start(_type, _args) do
     Logger.info("App started, cwd: #{File.cwd!()}")
 
-    # TODO: Worker to run pipeline every $interval seconds
-    # {:ok, a} = DoubleGisMonitor.Pipeline.Fetch.call()
-    # {:ok, b} = DoubleGisMonitor.Pipeline.Process.call(a)
-    # {:ok, c} = DoubleGisMonitor.Pipeline.Dispatch.call(b)
+    children =
+      case Application.fetch_env!(:double_gis_monitor, :env) do
+        :test ->
+          Logger.info("Using test environment. Do not add supervisor children.")
 
-    children = [
-      DoubleGisMonitor.Db.Repo,
-      DoubleGisMonitor.Bot.Telegram
-      # DoubleGisMonitor.Worker.Poller
-    ]
+          []
 
-    # TODO: Do not run children in test env
+        other ->
+          Logger.info("Using #{other} environment. Adding supervisor children.")
+
+          [
+            DoubleGisMonitor.Db.Repo,
+            DoubleGisMonitor.Bot.Telegram
+            # DoubleGisMonitor.Worker.Poller
+            # TODO: Worker to run pipeline every $interval seconds
+            # {:ok, a} = DoubleGisMonitor.Pipeline.Fetch.call()
+            # {:ok, b} = DoubleGisMonitor.Pipeline.Process.call(a)
+            # {:ok, c} = DoubleGisMonitor.Pipeline.Dispatch.call(b)
+          ]
+      end
 
     opts = [strategy: :one_for_one, name: __MODULE__.Supervisor]
     Supervisor.start_link(children, opts)
