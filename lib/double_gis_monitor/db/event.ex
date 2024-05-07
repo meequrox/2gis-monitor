@@ -1,6 +1,6 @@
 defmodule DoubleGisMonitor.Db.Event do
   @moduledoc """
-  TODO: moduledoc
+  A struct representing a 2GIS event processed by the corresponding module.
   """
 
   use Ecto.Schema

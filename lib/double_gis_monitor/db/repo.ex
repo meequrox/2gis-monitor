@@ -1,6 +1,8 @@
 defmodule DoubleGisMonitor.Db.Repo do
   @moduledoc """
-  TODO: moduledoc
+  Primary repo containing tables:
+  - events
+  - messages
   """
 
   use Ecto.Repo,
