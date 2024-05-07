@@ -1,11 +1,14 @@
 defmodule DoubleGisMonitor.Bot.Telegram do
   @moduledoc """
-  TODO: moduledoc
+  Telegram bot that responds only to messages in a specific channel (set in the private project configuration).
+
+  The module supports the usual principle of bot operation (command-response), but using the channel posts.
+  The bot's functions will mainly be used by the dispatch module.
   """
 
   use Telegex.Polling.GenHandler
 
-  @send_delay 1100
+  @send_delay 1050
 
   defmacro send_delay(), do: @send_delay
 
@@ -29,11 +32,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     commands =
       [
         %Telegex.Type.BotCommand{command: "help", description: "Print all commands"},
-        %Telegex.Type.BotCommand{command: "info", description: "Print service status"},
-        %Telegex.Type.BotCommand{
-          command: "reset",
-          description: "Delete all events from database and channel"
-        }
+        %Telegex.Type.BotCommand{command: "info", description: "Print service status"}
       ]
 
     {:ok, true} = Telegex.set_my_commands(commands)
@@ -65,9 +64,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
         "/info" ->
           handle_command(:info, chat)
-
-        "/reset" ->
-          handle_command(:reset, chat)
 
         _other ->
           Logger.info("Rejected unknown message: #{inspect(message)}")
@@ -120,23 +116,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     Process.sleep(@send_delay)
 
     case Telegex.send_message(channel_id, reply) do
-      {:ok, _message} ->
-        :ok
-
-      {:error, error} ->
-        Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
-    end
-  end
-
-  defp handle_command(:reset, %Telegex.Type.Chat{:id => channel_id}) do
-    # TODO: query and delete all linked messages
-    # TODO: truncate table messages (transaction)
-    # TODO: truncate table events (transaction)
-    # {:ok, _chat} = DoubleGisMonitor.Db.Repo.transaction(fn -> reset() end)
-
-    Process.sleep(@send_delay)
-
-    case Telegex.send_message(channel_id, "Database cleaned") do
       {:ok, _message} ->
         :ok
 
