@@ -192,7 +192,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
   end
 
   defp build_request_url(:events) do
-    env = Application.get_env(:double_gis_monitor, :fetch, [])
+    env = Application.fetch_env!(:double_gis_monitor, :fetch)
 
     case Keyword.take(env, [:city, :layers]) do
       [city: city, layers: layers] ->

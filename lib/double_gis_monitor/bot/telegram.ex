@@ -10,6 +10,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   @send_delay 1050
 
+  @spec send_delay() :: integer()
   defmacro send_delay(), do: @send_delay
 
   @impl true
@@ -54,7 +55,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
             :chat => %Telegex.Type.Chat{:type => "channel", :id => update_channel_id} = chat
           } = message
       }) do
-    env = Application.get_env(:double_gis_monitor, :dispatch, [])
+    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
     [channel_id: config_channel_id] = Keyword.take(env, [:channel_id])
 
     if config_channel_id === update_channel_id do
@@ -95,7 +96,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp handle_command(:info, %Telegex.Type.Chat{:id => channel_id}) do
-    env = Application.get_env(:double_gis_monitor, :fetch, [])
+    env = Application.fetch_env!(:double_gis_monitor, :fetch)
 
     [city: city, layers: layers, interval: interval] =
       Keyword.take(env, [:city, :layers, :interval])

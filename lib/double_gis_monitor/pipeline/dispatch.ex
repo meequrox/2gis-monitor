@@ -296,7 +296,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp append_link(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
        when is_float(lat) and is_float(lon) do
-    env = Application.get_env(:double_gis_monitor, :fetch, [])
+    env = Application.fetch_env!(:double_gis_monitor, :fetch)
     [city: city] = Keyword.take(env, [:city])
 
     params = %{m: "#{lon},#{lat}"}
