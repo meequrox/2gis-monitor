@@ -1,14 +1,17 @@
 defmodule DoubleGisMonitor.Pipeline.Fetch do
   @moduledoc """
-  TODO: moduledoc
+  A pipeline module that receives raw data from 2GIS servers and decodes it into a list of Elixir maps (list of events).
+
+  Each event in the list is supplemented with attachments: the number of attachments and a list of URLs.
   """
 
   require Logger
 
   @api_uri "tugc.2gis.com"
-  @request_delay 150
+  @request_delay 100
   @retry_delay 1500
 
+  @spec call() :: {:ok, list(map())} | {:error, atom()}
   def call() do
     case fetch_events() do
       {:ok, events} ->
@@ -19,7 +22,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
     end
   end
 
-  def fetch_events() do
+  defp fetch_events() do
     with {:ok, url} <- build_request_url(:events),
          {:ok, headers} <- build_request_headers(),
          {:ok, events} <- request_events(url, headers) do
@@ -54,8 +57,6 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   defp request_events(url, headers, attempt)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
-    Process.sleep(@request_delay)
-
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
          {:ok, events} <- Jason.decode(resp.body) do
@@ -93,7 +94,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
     end
   end
 
-  def fetch_attachments(events) when is_list(events) do
+  defp fetch_attachments(events) when is_list(events) do
     result =
       for event <- events do
         with {:ok, url} <- build_request_url(:attachments, event),
