@@ -27,12 +27,8 @@ defmodule DoubleGisMonitor.Application do
 
           [
             DoubleGisMonitor.Db.Repo,
-            DoubleGisMonitor.Bot.Telegram
-            # DoubleGisMonitor.Worker.Poller
-            # TODO: Worker to run pipeline every $interval seconds
-            # {:ok, a} = DoubleGisMonitor.Pipeline.Fetch.call()
-            # {:ok, b} = DoubleGisMonitor.Pipeline.Process.call(a)
-            # {:ok, c} = DoubleGisMonitor.Pipeline.Dispatch.call(b)
+            DoubleGisMonitor.Bot.Telegram,
+            DoubleGisMonitor.Worker
           ]
       end
 
