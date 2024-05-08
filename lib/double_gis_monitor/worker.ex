@@ -22,13 +22,12 @@ defmodule DoubleGisMonitor.Worker do
 
   @spec start_link(map()) :: GenServer.on_start()
   def start_link(state) do
-    GenServer.start_link(__MODULE__, state)
+    GenServer.start_link(__MODULE__, state, name: __MODULE__)
   end
 
   @impl true
   def init(state) do
-    Logger.info("Wait 5 seconds for other services to initialize")
-    Process.sleep(5)
+    DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :init)
 
     send(self(), :tick)
 
@@ -52,7 +51,7 @@ defmodule DoubleGisMonitor.Worker do
   @impl true
   def handle_info(:tick, state) do
     schedule_tick()
-    work()
+    spawn_worker()
 
     {:noreply, state}
   end
@@ -61,20 +60,41 @@ defmodule DoubleGisMonitor.Worker do
     Logger.warning("Received unknown info: #{inspect(info)}")
   end
 
-  defp work() do
+  defp spawn_worker(attempt \\ 0) do
+    name = :pipeline_worker
+
+    case Process.whereis(name) do
+      nil ->
+        Logger.info("Spawn new pipeline worker #{name}.")
+
+        pid = Process.spawn(__MODULE__, :work, [], [:link])
+        Process.register(pid, name)
+
+      pid ->
+        Logger.warning(
+          "[#{attempt}] The previous worker #{inspect(pid)} has not finished yet! Waiting..."
+        )
+
+        DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :spawn)
+        spawn_worker(attempt + 1)
+    end
+  end
+
+  def work() do
+    Logger.info("Pipeline started.")
+
     {:ok, fetched_events} = DoubleGisMonitor.Pipeline.Fetch.call()
     {:ok, processed_events} = DoubleGisMonitor.Pipeline.Process.call(fetched_events)
-    {:ok, dispatched_events} = DoubleGisMonitor.Pipeline.Dispatch.call(processed_events)
+    {:ok, _dispatched_events} = DoubleGisMonitor.Pipeline.Dispatch.call(processed_events)
 
-    inspect_opts = [limit: :infinity, printable_limit: :infinity, pretty: true]
-
-    Logger.info("Work done, pipeline passed!")
-    dispatched_events |> inspect(inspect_opts) |> Logger.info()
+    Logger.info("Pipeline passed!")
   end
 
   defp schedule_tick() do
     env = Application.fetch_env!(:double_gis_monitor, :fetch)
     [interval: interval] = Keyword.take(env, [:interval])
+
+    Logger.info("Schedule next pipeline start in #{interval} seconds")
 
     Process.send_after(self(), :tick, interval * 1000)
   end
