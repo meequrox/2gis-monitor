@@ -76,25 +76,33 @@ config(:double_gis_monitor, :env, config_env())
 
 config(:telegex, caller_adapter: {HTTPoison, [recv_timeout: 5 * 1000]})
 
-config(:logger, :console,
+config(:logger,
   backends: [
     :console,
     {LoggerFileBackend, :info_log},
     {LoggerFileBackend, :error_log}
-  ],
+  ]
+)
+
+config(:logger, :console,
   format: "[$date] [$time] [$level] $metadata: $message\n",
   metadata: [:registered_name, :pid, :mfa],
+  level: :info,
   colors: [info: :light_green]
 )
 
 config(:logger, :info_log,
-  path: "./log/info.log",
-  level: :info
+  format: "[$date] [$time] [$level] $metadata: $message\n",
+  metadata: [:registered_name, :pid, :mfa],
+  level: :info,
+  path: "./log/info.log"
 )
 
 config(:logger, :error_log,
-  path: "./log/error.log",
-  level: :error
+  format: "[$date] [$time] [$level] $metadata: $message\n",
+  metadata: [:registered_name, :pid, :mfa],
+  level: :error,
+  path: "./log/error.log"
 )
 
 if File.exists?("config/#{config_env()}.exs") do
