@@ -13,8 +13,6 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
-  @retry_delay 4000
-
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(%{:update => updated_events, :insert => inserted_events})
@@ -122,8 +120,6 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
     text = prepare_text(event)
 
-    Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
-
     case Telegex.send_message(channel_id, text, opts) do
       {:ok, %Telegex.Type.Message{:message_id => message_id}} ->
         db_message = %DoubleGisMonitor.Db.Message{
@@ -133,7 +129,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           list: [message_id]
         }
 
-        {:ok, db_message}
+        DoubleGisMonitor.RateLimiter.sleep_after({:ok, db_message}, __MODULE__, :send)
 
       {:error, error} ->
         case attempt do
@@ -141,7 +137,9 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
             {:error, error}
 
           below ->
-            Process.sleep(@retry_delay)
+            Logger.warning("Failed to send single message for event #{uuid}. Retrying...")
+
+            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
             send_event_single_message(channel_id, event, below + 1)
         end
     end
@@ -155,13 +153,8 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
        )
        when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) and
               is_integer(attempt) do
-    sleep_timeout =
-      trunc(DoubleGisMonitor.Bot.Telegram.send_delay() * (attachments_count + 1) / 2)
-
     text = prepare_text(event)
     media = build_media(event, text)
-
-    Process.sleep(sleep_timeout)
 
     case Telegex.send_media_group(channel_id, media) do
       {:ok, messages} ->
@@ -175,8 +168,12 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           list: list
         }
 
-        Process.sleep(sleep_timeout)
-        {:ok, db_message}
+        DoubleGisMonitor.RateLimiter.sleep_after(
+          {:ok, db_message},
+          __MODULE__,
+          :send,
+          attachments_count
+        )
 
       {:error, error} ->
         case attempt do
@@ -184,7 +181,9 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
             {:error, error}
 
           below ->
-            Process.sleep(@retry_delay * 2)
+            Logger.warning("Failed to send media group for event #{uuid}. Retrying...")
+
+            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
             send_event_group_message(channel_id, event, below + 1)
         end
     end
@@ -234,7 +233,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
     map_fun =
       fn event ->
-        text = "Updated at " <> datetime <> "\n\n" <> prepare_text(event)
+        text = "🔄 Updated at " <> datetime <> " 🔄\n\n" <> prepare_text(event)
 
         case update_message(event, channel_id, text) do
           {:error, error} ->
@@ -253,6 +252,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp update_message(
          %{
+           :uuid => uuid,
            :linked_messages => %DoubleGisMonitor.Db.Message{
              :type => type,
              :count => count,
@@ -264,8 +264,6 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
          attempt \\ 0
        )
        when is_integer(channel_id) and is_binary(text) do
-    Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
-
     result =
       case {type, count} do
         {"text", 1} ->
@@ -286,7 +284,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
     case result do
       {:ok, message} ->
-        {:ok, message}
+        DoubleGisMonitor.RateLimiter.sleep_after({:ok, message}, __MODULE__, :edit)
 
       {:error, error} ->
         case attempt do
@@ -294,7 +292,9 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
             {:error, error}
 
           below ->
-            Process.sleep(@retry_delay)
+            Logger.warning("Failed to update #{type} message for event #{uuid}. Retrying...")
+
+            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
             update_message(event, channel_id, text, below + 1)
         end
     end

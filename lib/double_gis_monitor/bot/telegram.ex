@@ -8,14 +8,10 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   use Telegex.Polling.GenHandler
 
-  @send_delay 1500
-
-  @spec send_delay() :: integer()
-  defmacro send_delay(), do: @send_delay
-
   @impl true
   def on_boot() do
     {:ok, true} = Telegex.delete_webhook()
+    DoubleGisMonitor.RateLimiter.sleep_after(:ok, __MODULE__, :request)
 
     %Telegex.Polling.Config{
       interval: 5000,
@@ -28,8 +24,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     env = Application.fetch_env!(:double_gis_monitor, :dispatch)
     [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
 
-    Process.sleep(@send_delay)
-
     commands =
       [
         %Telegex.Type.BotCommand{command: "help", description: "Print all commands"},
@@ -37,14 +31,13 @@ defmodule DoubleGisMonitor.Bot.Telegram do
       ]
 
     {:ok, true} = Telegex.set_my_commands(commands)
+    DoubleGisMonitor.RateLimiter.sleep_after(:ok, __MODULE__, :request)
 
     datetime = tz |> DateTime.now!(TimeZoneInfo.TimeZoneDatabase) |> Calendar.strftime("%H:%M:%S")
     text = "Bot started at " <> datetime <> "\n\n" <> commands_to_text(commands)
 
-    Process.sleep(@send_delay)
     {:ok, _message} = Telegex.send_message(channel_id, text)
-
-    :ok
+    DoubleGisMonitor.RateLimiter.sleep_after(:ok, __MODULE__, :send)
   end
 
   @impl true
@@ -81,14 +74,13 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   defp handle_command(:help, %Telegex.Type.Chat{:id => channel_id}) do
     {:ok, commands} = Telegex.get_my_commands()
+    DoubleGisMonitor.RateLimiter.sleep_after(:ok, __MODULE__, :request)
 
     reply = commands_to_text(commands)
 
-    Process.sleep(@send_delay)
-
     case Telegex.send_message(channel_id, reply) do
       {:ok, _message} ->
-        :ok
+        DoubleGisMonitor.RateLimiter.sleep_after(:ok, __MODULE__, :send)
 
       {:error, error} ->
         Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
@@ -114,11 +106,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
         "Interval: #{status.interval} seconds\n" <>
         "Events in database: #{status.events_count}\n"
 
-    Process.sleep(@send_delay)
-
     case Telegex.send_message(channel_id, reply) do
       {:ok, _message} ->
-        :ok
+        DoubleGisMonitor.RateLimiter.sleep_after(:ok, __MODULE__, :send)
 
       {:error, error} ->
         Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
