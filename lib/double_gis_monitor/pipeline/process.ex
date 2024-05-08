@@ -16,7 +16,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   defp process(events) when is_list(events) do
     with {:ok, new_events} <- convert_events_to_db(events),
          {:ok, outdated_db_events} <- get_outdated_events(),
-         {:ok, db_events_to_delete} <- find_outdated_events(new_events, outdated_db_events),
+         {:ok, db_events_to_delete} <- find_disappeared_events(new_events, outdated_db_events),
          {:ok, deleted_events} <- delete_outdated_events(db_events_to_delete),
          {:ok, _deleted_messages} <- delete_outdated_messages(deleted_events),
          {:ok, result_map} <- insert_or_update_events(new_events),
@@ -163,10 +163,16 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
-  defp delete_outdated_event_messages(event) when is_map(event) do
-    # TODO: delete TG messages linked to the event?
-    # Pending question
-    [:not, :implemented]
+  defp delete_outdated_event_messages(%{:uuid => uuid}) when is_binary(uuid) do
+    case DoubleGisMonitor.Db.Repo.delete(%DoubleGisMonitor.Db.Message{uuid: uuid},
+           returning: false
+         ) do
+      {:ok, struct} ->
+        struct
+
+      {:error, changeset} ->
+        DoubleGisMonitor.Db.Repo.rollback({:delete_outdated_event_messages, changeset})
+    end
   end
 
   defp delete_outdated_events(events) when is_list(events) do
@@ -195,7 +201,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
-  defp find_outdated_events(new_events, db_events)
+  defp find_disappeared_events(new_events, db_events)
        when is_list(new_events) and is_list(db_events) do
     filter_fun =
       fn %{:uuid => db_uuid} ->
