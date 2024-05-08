@@ -115,7 +115,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
            :attachments => new_attachments
          } = new_event
        )
-       when is_binary(new_comment) and is_map(new_feedback) and is_map(new_attachments) do
+       when is_map(new_feedback) and is_map(new_attachments) do
     changeset =
       old_event
       |> Ecto.Changeset.change()
