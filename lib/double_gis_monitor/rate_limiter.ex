@@ -5,6 +5,8 @@ defmodule DoubleGisMonitor.RateLimiter do
 
   require Logger
 
+  @default_timeout 30
+
   defp timeout_map() do
     %{
       :"Elixir.DoubleGisMonitor.Worker" => %{init: 5000, spawn: 10_000},
@@ -14,28 +16,27 @@ defmodule DoubleGisMonitor.RateLimiter do
     }
   end
 
-  defp get_timeout(module, action) when is_atom(action) do
-    default_delay = 30
+  defp get_timeout(module, action, multiplier) do
+    base_timeout = timeout_map() |> Map.get(module, %{}) |> Map.get(action, @default_timeout)
 
-    timeout_map() |> Map.get(module, %{}) |> Map.get(action, default_delay)
+    base_timeout * multiplier
+  end
+
+  defp sleep({module, action, times}, where) when is_binary(where) do
+    timeout = get_timeout(module, action, times)
+
+    Logger.info("Sleeping #{timeout}ms for #{inspect(module)} #{where} #{action}.")
+    Process.sleep(timeout)
   end
 
   def sleep_after(return_value, module, action, times \\ 1)
-      when is_atom(action) and is_integer(times) do
-    timeout = get_timeout(module, action) * times
-
-    Logger.info("Sleeping #{timeout}ms for #{inspect(module)} AFTER #{inspect(action)}.")
-    :ok = Process.sleep(timeout)
-
+      when is_atom(module) and is_atom(action) and is_integer(times) do
+    sleep({module, action, times}, "AFTER")
     return_value
   end
 
-  def sleep_before(module, action, times \\ 1) when is_atom(action) and is_integer(times) do
-    timeout = get_timeout(module, action) * times
-
-    Logger.info("Sleeping #{timeout}ms for #{inspect(module)} BEFORE #{inspect(action)}.")
-    :ok = Process.sleep(timeout)
-
-    :ok
+  def sleep_before(module, action, times \\ 1)
+      when is_atom(module) and is_atom(action) and is_integer(times) do
+    sleep({module, action, times}, "BEFORE")
   end
 end
