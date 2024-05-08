@@ -13,7 +13,15 @@ defmodule DoubleGisMonitor.Application do
   """
   @impl true
   def start(_type, _args) do
-    Logger.info("App started, cwd: #{File.cwd!()}")
+    Logger.info(
+      "DGM configuration:\n#{:double_gis_monitor |> Application.get_all_env() |> inspect(pretty: true)}"
+    )
+
+    Logger.info(
+      "Telegex configuration:\n#{:telegex |> Application.get_all_env() |> inspect(pretty: true)}"
+    )
+
+    Logger.info("Working directory: #{File.cwd!()}")
 
     children =
       case Application.fetch_env!(:double_gis_monitor, :env) do
