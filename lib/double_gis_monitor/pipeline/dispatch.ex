@@ -286,6 +286,10 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
       {:ok, message} ->
         DoubleGisMonitor.RateLimiter.sleep_after({:ok, message}, __MODULE__, :edit)
 
+      {:error,
+       %Telegex.Error{description: "Bad Request: message to edit not found", error_code: 400}} ->
+        DoubleGisMonitor.RateLimiter.sleep_after({:ok, nil}, __MODULE__, :request)
+
       {:error, error} ->
         case attempt do
           3 ->

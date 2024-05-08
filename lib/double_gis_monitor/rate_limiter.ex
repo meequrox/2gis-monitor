@@ -21,7 +21,12 @@ defmodule DoubleGisMonitor.RateLimiter do
     %{
       :"Elixir.DoubleGisMonitor.Worker" => %{init: 5000, spawn: 10_000},
       :"Elixir.DoubleGisMonitor.Pipeline.Fetch" => %{request: 100, retry: 2000},
-      :"Elixir.DoubleGisMonitor.Pipeline.Dispatch" => %{send: 3100, edit: 3100, retry: 3000},
+      :"Elixir.DoubleGisMonitor.Pipeline.Dispatch" => %{
+        send: 3100,
+        edit: 3100,
+        retry: 3000,
+        request: 100
+      },
       :"Elixir.DoubleGisMonitor.Bot.Telegram" => %{send: 3100, request: 100}
     }
   end
