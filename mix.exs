@@ -4,8 +4,8 @@ defmodule DoubleGisMonitor.MixProject do
   def project do
     [
       app: :double_gis_monitor,
-      version: "1.4.2",
-      elixir: "~> 1.11",
+      version: "1.5.1",
+      elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
