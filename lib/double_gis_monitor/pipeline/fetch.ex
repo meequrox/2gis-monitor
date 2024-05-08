@@ -51,11 +51,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
     end
   end
 
-  defp request_events(url, headers) when is_binary(url) and is_list(headers) do
-    request_events(url, headers, 0)
-  end
-
-  defp request_events(url, headers, attempt)
+  defp request_events(url, headers, attempt \\ 0)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
     with {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
@@ -107,11 +103,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
     {:ok, result}
   end
 
-  defp request_attachments(url, headers) when is_binary(url) and is_list(headers) do
-    request_attachments(url, headers, 0)
-  end
-
-  defp request_attachments(url, headers, attempt)
+  defp request_attachments(url, headers, attempt \\ 0)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
     Process.sleep(@request_delay)
 

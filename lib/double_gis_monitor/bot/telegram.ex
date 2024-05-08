@@ -8,7 +8,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   use Telegex.Polling.GenHandler
 
-  @send_delay 1050
+  @send_delay 1500
 
   @spec send_delay() :: integer()
   defmacro send_delay(), do: @send_delay
@@ -18,7 +18,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     {:ok, true} = Telegex.delete_webhook()
 
     %Telegex.Polling.Config{
-      interval: 2000,
+      interval: 5000,
       allowed_updates: ["channel_post"]
     }
   end

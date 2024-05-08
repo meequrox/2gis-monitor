@@ -13,6 +13,8 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
+  @retry_delay 2000
+
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(%{:update => updated_events, :insert => inserted_events})
@@ -100,20 +102,21 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
        when is_integer(channel_id) and is_integer(attachments_count) do
     case attachments_count do
       0 ->
-        send_event_message(:single_message, channel_id, event)
+        send_event_single_message(channel_id, event)
 
       _greater ->
-        send_event_message(:media_group, channel_id, event)
+        send_event_group_message(channel_id, event)
     end
   end
 
-  defp send_event_message(
-         :single_message,
+  defp send_event_single_message(
          channel_id,
          %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
-           event
+           event,
+         attempt \\ 0
        )
-       when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) do
+       when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) and
+              is_integer(attempt) do
     link_preview_opts = %Telegex.Type.LinkPreviewOptions{is_disabled: true}
     opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
 
@@ -133,17 +136,25 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
         {:ok, db_message}
 
       {:error, error} ->
-        {:error, error}
+        case attempt do
+          3 ->
+            {:error, error}
+
+          below ->
+            Process.sleep(@retry_delay)
+            send_event_single_message(channel_id, event, below + 1)
+        end
     end
   end
 
-  defp send_event_message(
-         :media_group,
+  defp send_event_group_message(
          channel_id,
          %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
-           event
+           event,
+         attempt \\ 0
        )
-       when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) do
+       when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) and
+              is_integer(attempt) do
     text = prepare_text(event)
     media = build_media(event, text)
 
@@ -165,8 +176,14 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
         {:ok, db_message}
 
       {:error, error} ->
-        Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
-        {:error, error}
+        case attempt do
+          3 ->
+            {:error, error}
+
+          below ->
+            Process.sleep(@retry_delay * 2)
+            send_event_group_message(channel_id, event, below + 1)
+        end
     end
   end
 
