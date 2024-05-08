@@ -7,51 +7,50 @@ name: Elixir CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 permissions:
   contents: read
 
 jobs:
   build:
-
     name: Build and test
     runs-on: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v4.1.2
-    - name: Set up Elixir
-      uses: erlef/setup-beam@v1.17.5
-      with:
-        elixir-version: '1.16.2' # [Required] Define the Elixir version
-        otp-version: '26.2.4'    # [Required] Define the Erlang/OTP version
-    - name: Restore dependencies cache
-      uses: actions/cache@v4.0.2
-      with:
-        path: deps
-        key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-        restore-keys: ${{ runner.os }}-mix-
-    - name: Setup environment
-      run: echo "MIX_ENV=test" >> $GITHUB_ENV
-    - name: Install dependencies
-      run: mix deps.get
-    - name: Compile dependencies
-      run: mix deps.compile
-    - name: Install database
-      uses: ikalnytskyi/action-setup-postgres@v5
-      with:
-        username: postgres
-        password: CWPIG-QRVIY-IWDMJ-PDQMV
-        database: double_gis_monitor_repo
-        port: 5432
-      id: postgres
-    - name: Create database
-      run: mix ecto.create
-    - name: Apply migrations
-      run: mix ecto.migrate
-    - name: Compile project
-      run: mix compile
-    - name: Run tests
-      run: mix test
+      - uses: actions/checkout@v4
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.16.2" # [Required] Define the Elixir version
+          otp-version: "26.2.5" # [Required] Define the Erlang/OTP version
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Setup environment
+        run: echo "MIX_ENV=test" >> $GITHUB_ENV
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Compile dependencies
+        run: mix deps.compile
+      - name: Install database
+        uses: ikalnytskyi/action-setup-postgres@v5
+        with:
+          username: postgres
+          password: postgres
+          database: double_gis_monitor_repo
+          port: 5432
+        id: postgres
+      - name: Create database
+        run: mix ecto.create
+      - name: Apply migrations
+        run: mix ecto.migrate
+      - name: Compile project
+        run: mix compile
+      - name: Run tests
+        run: mix test
