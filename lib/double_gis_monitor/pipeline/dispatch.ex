@@ -155,10 +155,13 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
        )
        when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) and
               is_integer(attempt) do
+    sleep_timeout =
+      trunc(DoubleGisMonitor.Bot.Telegram.send_delay() * (attachments_count + 1) / 2)
+
     text = prepare_text(event)
     media = build_media(event, text)
 
-    Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
+    Process.sleep(sleep_timeout)
 
     case Telegex.send_media_group(channel_id, media) do
       {:ok, messages} ->
@@ -172,7 +175,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           list: list
         }
 
-        Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay() * (attachments_count - 1))
+        Process.sleep(sleep_timeout)
         {:ok, db_message}
 
       {:error, error} ->
