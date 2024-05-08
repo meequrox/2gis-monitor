@@ -13,7 +13,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
-  @retry_delay 2000
+  @retry_delay 4000
 
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
@@ -251,30 +251,51 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     {:ok, messages}
   end
 
-  defp update_message(%{:linked_messages => linked_messages}, channel_id, text)
-       when is_map(linked_messages) and is_integer(channel_id) and is_binary(text) do
+  defp update_message(
+         %{
+           :linked_messages => %DoubleGisMonitor.Db.Message{
+             :type => type,
+             :count => count,
+             :list => [first_message_id | _rest]
+           }
+         } = event,
+         channel_id,
+         text,
+         attempt \\ 0
+       )
+       when is_integer(channel_id) and is_binary(text) do
     Process.sleep(DoubleGisMonitor.Bot.Telegram.send_delay())
 
-    case linked_messages do
-      %DoubleGisMonitor.Db.Message{:type => "text", :count => 1, :list => [message_id]} = msg ->
-        case Telegex.edit_message_text(text,
-               chat_id: channel_id,
-               message_id: message_id,
-               parse_mode: "HTML"
-             ) do
-          {:ok, _message} -> {:ok, msg}
-          {:error, error} -> {:error, error}
-        end
+    result =
+      case {type, count} do
+        {"text", 1} ->
+          Telegex.edit_message_text(text,
+            chat_id: channel_id,
+            message_id: first_message_id,
+            parse_mode: "HTML"
+          )
 
-      %DoubleGisMonitor.Db.Message{:type => "caption", :list => [message_id | _rest]} = msg ->
-        case Telegex.edit_message_caption(
-               chat_id: channel_id,
-               message_id: message_id,
-               caption: text,
-               parse_mode: "HTML"
-             ) do
-          {:ok, _message} -> {:ok, msg}
-          {:error, error} -> {:error, error}
+        {"caption", _} ->
+          Telegex.edit_message_caption(
+            chat_id: channel_id,
+            message_id: first_message_id,
+            caption: text,
+            parse_mode: "HTML"
+          )
+      end
+
+    case result do
+      {:ok, message} ->
+        {:ok, message}
+
+      {:error, error} ->
+        case attempt do
+          3 ->
+            {:error, error}
+
+          below ->
+            Process.sleep(@retry_delay)
+            update_message(event, channel_id, text, below + 1)
         end
     end
   end

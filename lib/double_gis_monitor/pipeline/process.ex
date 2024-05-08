@@ -148,10 +148,15 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp delete_outdated_messages(events) when is_list(events) do
-    transaction_fun =
-      fn ->
-        Enum.map(events, fn event -> delete_outdated_event_messages(event) end)
+    map_fun =
+      fn %{:uuid => uuid} = event ->
+        case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Message, uuid) do
+          nil -> {:ok, event}
+          struct -> delete_outdated_event_messages(struct)
+        end
       end
+
+    transaction_fun = fn -> Enum.map(events, map_fun) end
 
     case DoubleGisMonitor.Db.Repo.transaction(transaction_fun) do
       {:ok, deleted_messages} ->
