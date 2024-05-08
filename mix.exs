@@ -28,6 +28,7 @@ defmodule DoubleGisMonitor.MixProject do
       {:postgrex, "~> 0.17.5"},
       {:time_zone_info, "~> 0.7.2"},
       {:telegex, "~> 1.6"},
+      {:logger_file_backend, "~> 0.0.14"},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
     ]
   end

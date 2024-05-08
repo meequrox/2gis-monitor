@@ -50,8 +50,8 @@ defmodule DoubleGisMonitor.Worker do
 
   @impl true
   def handle_info(:tick, state) do
-    schedule_tick()
     spawn_worker()
+    schedule_tick()
 
     {:noreply, state}
   end
