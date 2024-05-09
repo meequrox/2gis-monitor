@@ -7,6 +7,8 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   require Logger
 
+  alias DoubleGisMonitor.RateLimiter
+
   @api_uri "tugc.2gis.com"
 
   @spec call() :: {:ok, list(map())} | {:error, atom()}
@@ -51,7 +53,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   defp request_events(url, headers, attempt \\ 0)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
-    with :ok <- DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :request),
+    with :ok <- RateLimiter.sleep_before(__MODULE__, :request),
          {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
          {:ok, events} <- Jason.decode(resp.body) do
@@ -65,7 +67,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
           below ->
             Logger.warning("GET request to #{url} failed. Retrying...")
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
+            RateLimiter.sleep_before(__MODULE__, :retry)
             request_events(url, headers, below + 1)
         end
 
@@ -77,7 +79,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
           below ->
             Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
+            RateLimiter.sleep_before(__MODULE__, :retry)
             request_events(url, headers, below + 1)
         end
 
@@ -106,7 +108,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
   defp request_attachments(url, headers, attempt \\ 0)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
-    with :ok <- DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :request),
+    with :ok <- RateLimiter.sleep_before(__MODULE__, :request),
          {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
          {:ok, map_list} <- Jason.decode(resp.body) do
@@ -122,7 +124,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
           below ->
             Logger.warning("GET request to #{url} failed. Retrying...")
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
+            RateLimiter.sleep_before(__MODULE__, :retry)
             request_attachments(url, headers, below + 1)
         end
 
@@ -137,7 +139,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
           below ->
             Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
+            RateLimiter.sleep_before(__MODULE__, :retry)
             request_attachments(url, headers, below + 1)
         end
 

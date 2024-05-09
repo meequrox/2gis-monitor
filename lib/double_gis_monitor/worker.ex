@@ -9,6 +9,8 @@ defmodule DoubleGisMonitor.Worker do
 
   require Logger
 
+  alias DoubleGisMonitor.RateLimiter
+
   @spec child_spec() :: map()
   def child_spec() do
     %{
@@ -27,7 +29,7 @@ defmodule DoubleGisMonitor.Worker do
 
   @impl true
   def init(state) do
-    DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :init)
+    RateLimiter.sleep_before(__MODULE__, :init)
 
     send(self(), :tick)
 
@@ -75,7 +77,7 @@ defmodule DoubleGisMonitor.Worker do
           "[#{attempt}] The previous worker #{inspect(pid)} has not finished yet! Waiting..."
         )
 
-        DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :spawn)
+        RateLimiter.sleep_before(__MODULE__, :spawn)
         spawn_worker(attempt + 1)
     end
   end
