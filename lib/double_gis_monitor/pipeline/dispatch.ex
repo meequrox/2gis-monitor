@@ -13,6 +13,8 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
+  alias DoubleGisMonitor.RateLimiter
+
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(%{:update => updated_events, :insert => inserted_events})
@@ -129,7 +131,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           list: [message_id]
         }
 
-        DoubleGisMonitor.RateLimiter.sleep_after({:ok, db_message}, __MODULE__, :send)
+        RateLimiter.sleep_after({:ok, db_message}, __MODULE__, :send)
 
       {:error, error} ->
         case attempt do
@@ -139,7 +141,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           below ->
             Logger.warning("Failed to send single message for event #{uuid}. Retrying...")
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
+            RateLimiter.sleep_before(__MODULE__, :retry)
             send_event_single_message(channel_id, event, below + 1)
         end
     end
@@ -168,7 +170,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           list: list
         }
 
-        DoubleGisMonitor.RateLimiter.sleep_after(
+        RateLimiter.sleep_after(
           {:ok, db_message},
           __MODULE__,
           :send,
@@ -183,7 +185,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
           below ->
             Logger.warning("Failed to send media group for event #{uuid}. Retrying...")
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
+            RateLimiter.sleep_before(__MODULE__, :retry)
             send_event_group_message(channel_id, event, below + 1)
         end
     end
@@ -252,7 +254,6 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp update_message(
          %{
-           :uuid => uuid,
            :linked_messages => %DoubleGisMonitor.Db.Message{
              :type => type,
              :count => count,
@@ -262,45 +263,74 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
          channel_id,
          text,
          attempt \\ 0
-       )
-       when is_integer(channel_id) and is_binary(text) do
-    result =
-      case {type, count} do
-        {"text", 1} ->
-          Telegex.edit_message_text(text,
-            chat_id: channel_id,
-            message_id: first_message_id,
-            parse_mode: "HTML"
-          )
-
-        {"caption", _} ->
-          Telegex.edit_message_caption(
-            chat_id: channel_id,
-            message_id: first_message_id,
-            caption: text,
-            parse_mode: "HTML"
-          )
-      end
-
-    case result do
+       ) do
+    case update_message_based_on_type({type, count}, channel_id, text, first_message_id) do
       {:ok, message} ->
-        DoubleGisMonitor.RateLimiter.sleep_after({:ok, message}, __MODULE__, :edit)
+        RateLimiter.sleep_after({:ok, message}, __MODULE__, :edit)
 
-      {:error,
-       %Telegex.Error{description: "Bad Request: message to edit not found", error_code: 400}} ->
-        DoubleGisMonitor.RateLimiter.sleep_after({:ok, nil}, __MODULE__, :request)
+      {:error, %Telegex.Error{error_code: 400} = error} ->
+        RateLimiter.sleep_after({:error, error}, __MODULE__, :request)
 
       {:error, error} ->
-        case attempt do
-          3 ->
-            {:error, error}
+        handle_update_message_error(error, event, channel_id, text, attempt)
+    end
+  end
 
-          below ->
-            Logger.warning("Failed to update #{type} message for event #{uuid}. Retrying...")
+  defp handle_update_message_error(
+         %Telegex.Error{:error_code => code, :description => desc} = error,
+         %{:uuid => uuid, :linked_messages => %DoubleGisMonitor.Db.Message{:type => type}} =
+           event,
+         channel_id,
+         text,
+         attempt
+       ) do
+    case code do
+      429 ->
+        "Too Many Requests: retry after " <> timeout = desc
+        seconds = timeout |> String.to_integer()
 
-            DoubleGisMonitor.RateLimiter.sleep_before(__MODULE__, :retry)
-            update_message(event, channel_id, text, below + 1)
+        if seconds > 300 do
+          ^seconds = 300
         end
+
+        "Caught #{timeout} seconds rate limit! Will sleep for #{seconds} seconds..."
+        |> Logger.error()
+        |> RateLimiter.sleep_after(__MODULE__, :too_many_requests, seconds)
+
+      _ ->
+        :ok
+    end
+
+    case attempt do
+      3 ->
+        {:error, error}
+
+      below ->
+        Logger.warning("Failed to update #{type} message for event #{uuid}. Retrying...")
+
+        RateLimiter.sleep_before(__MODULE__, :retry)
+        update_message(event, channel_id, text, below + 1)
+    end
+  end
+
+  defp update_message_based_on_type({type, count}, channel_id, text, first_message_id)
+       when is_binary(type) and is_integer(count) and is_integer(channel_id) and is_binary(text) and
+              is_integer(first_message_id) do
+    case {type, count} do
+      {"text", 1} ->
+        Telegex.edit_message_text(text,
+          chat_id: channel_id,
+          message_id: first_message_id,
+          parse_mode: "HTML"
+        )
+
+      {"caption", _} ->
+        Telegex.edit_message_caption(
+          chat_id: channel_id,
+          message_id: first_message_id,
+          caption: text,
+          parse_mode: "HTML"
+        )
     end
   end
 

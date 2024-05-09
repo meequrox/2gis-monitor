@@ -25,7 +25,8 @@ defmodule DoubleGisMonitor.RateLimiter do
         send: 3100,
         edit: 3100,
         retry: 3000,
-        request: 100
+        request: 100,
+        too_many_requests: 1000
       },
       :"Elixir.DoubleGisMonitor.Bot.Telegram" => %{send: 3100, request: 100}
     }
