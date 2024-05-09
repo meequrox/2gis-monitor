@@ -14,6 +14,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require Logger
 
   alias DoubleGisMonitor.RateLimiter
+  alias DoubleGisMonitor.Db, as: Database
 
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
@@ -21,9 +22,8 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
       when is_list(updated_events) and is_list(inserted_events) do
     with {:ok, updated_messages} <- dispatch(:update, updated_events),
          {:ok, inserted_messages} <- dispatch(:insert, inserted_events) do
-      Logger.info(
-        "#{Enum.count(updated_messages)} updates and #{Enum.count(inserted_messages)} new messages dispatched."
-      )
+      "#{Enum.count(updated_messages)} updates and #{Enum.count(inserted_messages)} new messages dispatched."
+      |> Logger.info()
 
       {:ok, %{:update => updated_messages, :insert => inserted_messages}}
     else
@@ -55,14 +55,14 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     transaction_fun =
       fn ->
         for message <- messages do
-          case DoubleGisMonitor.Db.Repo.insert(message, returning: false) do
+          case Database.Repo.insert(message, returning: false) do
             {:ok, struct} -> struct
-            {:error, changeset} -> DoubleGisMonitor.Db.Repo.rollback({:insert, changeset})
+            {:error, changeset} -> Database.Repo.rollback({:insert, changeset})
           end
         end
       end
 
-    case DoubleGisMonitor.Db.Repo.transaction(transaction_fun) do
+    case Database.Repo.transaction(transaction_fun) do
       {:ok, inserted_messages} ->
         {:ok, inserted_messages}
 
@@ -84,11 +84,11 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
           {:error, error} ->
             Logger.error("Failed to send new event message: #{inspect({event, error})}")
-            %DoubleGisMonitor.Db.Message{uuid: nil}
+            %Database.Message{uuid: nil}
         end
       end
 
-    filter_fun = fn %DoubleGisMonitor.Db.Message{:uuid => uuid} -> not is_nil(uuid) end
+    filter_fun = fn %Database.Message{:uuid => uuid} -> not is_nil(uuid) end
 
     messages = events |> Enum.map(map_fun) |> Enum.filter(filter_fun)
 
@@ -97,7 +97,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp send_event_message(
          channel_id,
-         %DoubleGisMonitor.Db.Event{:attachments => %{:count => attachments_count}} = event
+         %Database.Event{:attachments => %{:count => attachments_count}} = event
        )
        when is_integer(channel_id) and is_integer(attachments_count) do
     case attachments_count do
@@ -111,7 +111,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp send_event_single_message(
          channel_id,
-         %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
+         %Database.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
            event,
          attempt \\ 0
        )
@@ -124,7 +124,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
     case Telegex.send_message(channel_id, text, opts) do
       {:ok, %Telegex.Type.Message{:message_id => message_id}} ->
-        db_message = %DoubleGisMonitor.Db.Message{
+        db_message = %Database.Message{
           uuid: uuid,
           type: "text",
           count: 1,
@@ -149,7 +149,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp send_event_group_message(
          channel_id,
-         %DoubleGisMonitor.Db.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
+         %Database.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
            event,
          attempt \\ 0
        )
@@ -163,7 +163,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
         list =
           for %Telegex.Type.Message{:message_id => message_id} <- messages, do: message_id
 
-        db_message = %DoubleGisMonitor.Db.Message{
+        db_message = %Database.Message{
           uuid: uuid,
           type: "caption",
           count: attachments_count,
@@ -192,7 +192,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   end
 
   defp build_media(
-         %DoubleGisMonitor.Db.Event{:attachments => %{:count => count, :list => list}},
+         %Database.Event{:attachments => %{:count => count, :list => list}},
          text
        )
        when is_integer(count) and is_list(list) and is_binary(text) do
@@ -231,7 +231,9 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
 
     datetime =
-      tz |> DateTime.now!(TimeZoneInfo.TimeZoneDatabase) |> Calendar.strftime("%d.%m.%y %H:%M:%S")
+      tz
+      |> DateTime.now!(TimeZoneInfo.TimeZoneDatabase)
+      |> Calendar.strftime("%d.%m.%y %H:%M:%S")
 
     map_fun =
       fn event ->
@@ -254,7 +256,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp update_message(
          %{
-           :linked_messages => %DoubleGisMonitor.Db.Message{
+           :linked_messages => %Database.Message{
              :type => type,
              :count => count,
              :list => [first_message_id | _rest]
@@ -278,7 +280,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp handle_update_message_error(
          %Telegex.Error{:error_code => code, :description => desc} = error,
-         %{:uuid => uuid, :linked_messages => %DoubleGisMonitor.Db.Message{:type => type}} =
+         %{:uuid => uuid, :linked_messages => %Database.Message{:type => type}} =
            event,
          channel_id,
          text,
@@ -414,17 +416,17 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp link_updates_with_messages(events) when is_list(events) do
     map_fun =
-      fn %DoubleGisMonitor.Db.Event{:uuid => uuid} = event ->
+      fn %Database.Event{:uuid => uuid} = event ->
         messages =
-          case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Message, uuid) do
-            nil -> %DoubleGisMonitor.Db.Message{uuid: nil}
+          case Database.Repo.get(Database.Message, uuid) do
+            nil -> %Database.Message{uuid: nil}
             any -> any
           end
 
         Map.put(event, :linked_messages, messages)
       end
 
-    filter_fun = fn %{:linked_messages => %DoubleGisMonitor.Db.Message{:uuid => t}} ->
+    filter_fun = fn %{:linked_messages => %Database.Message{:uuid => t}} ->
       not is_nil(t)
     end
 

@@ -10,6 +10,8 @@ defmodule DoubleGisMonitor.Pipeline.Process do
 
   import Ecto.Query, only: [from: 2]
 
+  alias DoubleGisMonitor.Db, as: Database
+
   @spec call(list(map())) :: {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(events) when is_list(events), do: process(events)
 
@@ -62,7 +64,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
         Enum.map(events, fn event -> insert_or_update_event(event) end)
       end
 
-    case DoubleGisMonitor.Db.Repo.transaction(transaction_fun) do
+    case Database.Repo.transaction(transaction_fun) do
       {:ok, events_with_operation} ->
         key_fun = fn {_event, operation} -> operation end
         value_fun = fn {event, _operation} -> event end
@@ -80,9 +82,9 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
-  defp insert_or_update_event(%DoubleGisMonitor.Db.Event{:uuid => uuid} = event)
+  defp insert_or_update_event(%Database.Event{:uuid => uuid} = event)
        when is_binary(uuid) do
-    case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Event, uuid) do
+    case Database.Repo.get(Database.Event, uuid) do
       nil ->
         insert_event(event)
 
@@ -98,18 +100,18 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp insert_event(event) when is_map(event) do
-    case DoubleGisMonitor.Db.Repo.insert(event) do
+    case Database.Repo.insert(event) do
       {:ok, _struct} ->
         {event, :insert}
 
       {:error, changeset} ->
-        DoubleGisMonitor.Db.Repo.rollback({:insert_or_update_event, changeset})
+        Database.Repo.rollback({:insert_or_update_event, changeset})
     end
   end
 
   defp update_event(
          old_event,
-         %DoubleGisMonitor.Db.Event{
+         %Database.Event{
            :comment => new_comment,
            :feedback => new_feedback,
            :attachments => new_attachments
@@ -123,12 +125,12 @@ defmodule DoubleGisMonitor.Pipeline.Process do
       |> Ecto.Changeset.put_change(:feedback, new_feedback)
       |> Ecto.Changeset.put_change(:attachments, new_attachments)
 
-    case DoubleGisMonitor.Db.Repo.update(changeset) do
+    case Database.Repo.update(changeset) do
       {:ok, _struct} ->
         {new_event, :update}
 
       {:error, changeset} ->
-        DoubleGisMonitor.Db.Repo.rollback({:insert_or_update_event, changeset})
+        Database.Repo.rollback({:insert_or_update_event, changeset})
     end
   end
 
@@ -150,7 +152,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   defp delete_outdated_messages(events) when is_list(events) do
     map_fun =
       fn %{:uuid => uuid} = event ->
-        case DoubleGisMonitor.Db.Repo.get(DoubleGisMonitor.Db.Message, uuid) do
+        case Database.Repo.get(Database.Message, uuid) do
           nil -> {:ok, event}
           struct -> delete_outdated_event_messages(struct)
         end
@@ -158,7 +160,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
 
     transaction_fun = fn -> Enum.map(events, map_fun) end
 
-    case DoubleGisMonitor.Db.Repo.transaction(transaction_fun) do
+    case Database.Repo.transaction(transaction_fun) do
       {:ok, deleted_messages} ->
         {:ok, deleted_messages}
 
@@ -169,14 +171,14 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp delete_outdated_event_messages(%{:uuid => uuid}) when is_binary(uuid) do
-    case DoubleGisMonitor.Db.Repo.delete(%DoubleGisMonitor.Db.Message{uuid: uuid},
+    case Database.Repo.delete(%Database.Message{uuid: uuid},
            returning: false
          ) do
       {:ok, struct} ->
         struct
 
       {:error, changeset} ->
-        DoubleGisMonitor.Db.Repo.rollback({:delete_outdated_event_messages, changeset})
+        Database.Repo.rollback({:delete_outdated_event_messages, changeset})
     end
   end
 
@@ -186,7 +188,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
         Enum.map(events, fn event -> delete_outdated_event(event) end)
       end
 
-    case DoubleGisMonitor.Db.Repo.transaction(transaction_fun) do
+    case Database.Repo.transaction(transaction_fun) do
       {:ok, deleted_events} ->
         {:ok, deleted_events}
 
@@ -197,12 +199,12 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp delete_outdated_event(%{:uuid => uuid}) do
-    case DoubleGisMonitor.Db.Repo.delete(%DoubleGisMonitor.Db.Event{uuid: uuid}, returning: false) do
+    case Database.Repo.delete(%Database.Event{uuid: uuid}, returning: false) do
       {:ok, struct} ->
         struct
 
       {:error, changeset} ->
-        DoubleGisMonitor.Db.Repo.rollback({:delete_outdated_event, changeset})
+        Database.Repo.rollback({:delete_outdated_event, changeset})
     end
   end
 
@@ -211,7 +213,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     filter_fun =
       fn %{:uuid => db_uuid} ->
         find_fun =
-          fn %DoubleGisMonitor.Db.Event{:uuid => uuid} ->
+          fn %Database.Event{:uuid => uuid} ->
             uuid == db_uuid
           end
 
@@ -232,7 +234,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
         where: ^ts_now - e.timestamp > ^(outdate_hours * 3600),
         select: [:uuid]
       )
-      |> DoubleGisMonitor.Db.Repo.all()
+      |> Database.Repo.all()
 
     {:ok, events}
   end
@@ -243,7 +245,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
         {:ok, converted_event} = convert_event_to_db(event)
         converted_event
       end
-      |> Enum.filter(fn %DoubleGisMonitor.Db.Event{:uuid => uuid} -> is_binary(uuid) end)
+      |> Enum.filter(fn %Database.Event{:uuid => uuid} -> is_binary(uuid) end)
 
     {:ok, result}
   end
@@ -261,7 +263,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
        )
        when is_binary(id) and is_integer(ts) and is_binary(type) and is_map(user_info) and
               is_float(lon) and is_float(lat) and is_integer(likes) and is_integer(dislikes) do
-    new_event = %DoubleGisMonitor.Db.Event{
+    new_event = %Database.Event{
       uuid: id,
       timestamp: ts,
       type: type,
@@ -276,6 +278,6 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp convert_event_to_db(_other) do
-    {:ok, %DoubleGisMonitor.Db.Event{uuid: :invalid}}
+    {:ok, %Database.Event{uuid: :invalid}}
   end
 end

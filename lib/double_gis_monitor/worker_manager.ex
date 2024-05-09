@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Worker do
+defmodule DoubleGisMonitor.WorkerManager do
   @moduledoc """
   Worker that starts the event pipeline at some interval.
 
@@ -10,6 +10,7 @@ defmodule DoubleGisMonitor.Worker do
   require Logger
 
   alias DoubleGisMonitor.RateLimiter
+  alias DoubleGisMonitor.Pipeline
 
   @spec child_spec() :: map()
   def child_spec() do
@@ -85,9 +86,9 @@ defmodule DoubleGisMonitor.Worker do
   def work() do
     Logger.info("Pipeline started.")
 
-    {:ok, fetched_events} = DoubleGisMonitor.Pipeline.Fetch.call()
-    {:ok, processed_events} = DoubleGisMonitor.Pipeline.Process.call(fetched_events)
-    {:ok, _dispatched_events} = DoubleGisMonitor.Pipeline.Dispatch.call(processed_events)
+    {:ok, fetched_events} = Pipeline.Fetch.call()
+    {:ok, processed_events} = Pipeline.Process.call(fetched_events)
+    {:ok, _dispatched_events} = Pipeline.Dispatch.call(processed_events)
 
     Logger.info("Pipeline passed!")
   end

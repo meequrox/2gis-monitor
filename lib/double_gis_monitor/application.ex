@@ -36,7 +36,7 @@ defmodule DoubleGisMonitor.Application do
           [
             DoubleGisMonitor.Db.Repo,
             DoubleGisMonitor.Bot.Telegram,
-            DoubleGisMonitor.Worker
+            DoubleGisMonitor.WorkerManager
           ]
       end
 
