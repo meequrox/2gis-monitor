@@ -157,4 +157,4 @@ It would be great if you open an issue and provide the logs.
 
 #### I'm from the 2GIS team and I would like to discuss a few things.
 
-You can contact me at [Matrix](https://matrix.to/#/@sunnymw:imagisphe.re)
+You can find my contacts [here](https://github.com/meequrox#contacts).
