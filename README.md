@@ -1,8 +1,6 @@
 ![Logo](.github/images/logo-01.png)
 
-# 2GIS Monitor
-
-2GIS Monitor is a service that provides periodic fetching of events (aka comments) from the [2GIS map](https://2gis.ru) directly to your Telegram channel.
+**2GIS Monitor** is a service that provides periodic fetching of events (aka comments) from the [2GIS map](https://2gis.ru) directly to your Telegram channel.
 
 The idea for creating the project was our Telegram channel, in which we posted interesting or funny comments on the map.
 
@@ -98,7 +96,7 @@ It should work **faster** by preloading all the code into memory.
 
   mix deps.get --only prod
   mix release --path release/double_gis_monitor
-  
+
   ./release/double_gis_monitor/bin/double_gis_monitor start_iex
 ```
 
@@ -113,7 +111,7 @@ All environment variables are described in detail in the file **[config/runtime.
 
 ```bash
   # Assuming we are in the root directory
-  
+
   cd compose
   cp example.env .env
 ```
