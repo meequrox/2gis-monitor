@@ -1,0 +1,49 @@
+services:
+  double_gis_monitor:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DGM_TIMEZONE: "${DGM_TIMEZONE}"
+      DGM_CITY: "${DGM_CITY}"
+      DGM_LAYERS: "${DGM_LAYERS}"
+      DGM_INTERVAL: "${DGM_INTERVAL}"
+      DGM_TG_TOKEN: "${DGM_TG_TOKEN}"
+      DGM_TG_CHANNEL: "${DGM_TG_CHANNEL}"
+      DGM_LOG_DIR: "${DGM_LOG_DIR}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      DGM_POSTGRES_HOSTNAME: "${DGM_POSTGRES_HOSTNAME}"
+      DGM_POSTGRES_PORT: "${DGM_POSTGRES_PORT}"
+    volumes:
+      - ./log:/double_gis_monitor/log
+    networks:
+      - backend
+    depends_on:
+      double_gis_monitor-db:
+        condition: service_healthy
+
+  double_gis_monitor-db:
+    image: postgres:16-alpine
+    command: ["-c", "jit=off"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    networks:  
+      - backend
+    ports:
+      - 5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  backend:
