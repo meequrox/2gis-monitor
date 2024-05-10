@@ -25,9 +25,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   @impl true
   def on_init(_arg) do
-    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
-    [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
-
     commands =
       [
         %TgType.BotCommand{command: "help", description: "Print all commands"},
@@ -36,16 +33,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
     {:ok, true} = Telegex.set_my_commands(commands)
     RateLimiter.sleep_after(:ok, __MODULE__, :request)
-
-    time =
-      tz
-      |> DateTime.now!(TimeZoneInfo.TimeZoneDatabase)
-      |> Calendar.strftime("%H:%M:%S")
-
-    text = "Bot started at " <> time <> "\n\n" <> commands_to_text(commands)
-
-    {:ok, _message} = Telegex.send_message(channel_id, text)
-    RateLimiter.sleep_after(:ok, __MODULE__, :send)
   end
 
   @impl true
