@@ -29,6 +29,7 @@ defmodule DoubleGisMonitor.MixProject do
       {:time_zone_info, "~> 0.7.2"},
       {:telegex, "~> 1.7"},
       {:logger_file_backend, "~> 0.0.14"},
+      {:observer_cli, "~> 1.7"},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
     ]
   end

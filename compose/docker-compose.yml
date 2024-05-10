@@ -17,10 +17,9 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       DGM_POSTGRES_HOSTNAME: "${DGM_POSTGRES_HOSTNAME}"
       DGM_POSTGRES_PORT: "${DGM_POSTGRES_PORT}"
+      RELEASE_COOKIE: "${RELEASE_COOKIE}"
     volumes:
       - ./log:/double_gis_monitor/log
-    networks:
-      - backend
     depends_on:
       double_gis_monitor-db:
         condition: service_healthy
@@ -35,8 +34,6 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     volumes:
       - ./db:/var/lib/postgresql/data
-    networks:  
-      - backend
     ports:
       - 5432
     healthcheck:
@@ -44,6 +41,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-networks:
-  backend:
