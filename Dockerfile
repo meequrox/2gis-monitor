@@ -1,12 +1,12 @@
 # Stage 1: build
-FROM elixir:1.16.2-otp-26-alpine AS builder
+FROM elixir:otp-26-slim AS builder
 
 ENV MIX_ENV=prod
 
 WORKDIR /build/double_gis_monitor
 
-RUN apk update \
-    && apk add --no-cache git
+RUN apt-get update \
+    && apt-get install -y git
 
 COPY mix.exs mix.lock ./
 COPY config config
@@ -23,14 +23,13 @@ RUN mix compile \
     && mix release --path /double_gis_monitor
 
 # Stage 2: release
-FROM alpine:latest AS runner
-
-RUN apk update \
-    && apk add --no-cache libstdc++ libgcc ncurses-libs
+FROM debian:testing-slim AS runner
 
 COPY --from=builder /double_gis_monitor /double_gis_monitor
 
-EXPOSE 5432
+EXPOSE 4369
+
+ENV ERL_MAX_PORTS=32768
 
 ENTRYPOINT ["/double_gis_monitor/bin/double_gis_monitor"]
 CMD ["start"]
