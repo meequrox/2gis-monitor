@@ -2,6 +2,7 @@
 .idea/
 .elixir_ls/
 double_gis_monitor.iml
+run.sh
 
 # The directory Mix will write compiled artifacts to.
 /_build/
@@ -26,7 +27,7 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-webrtp-*.tar
+double_gis_monitor-*.tar
 
 # Temporary files for e.g. tests
 /tmp
@@ -39,6 +40,3 @@ compose/db
 
 # Mnesia files
 Mnesia.*@*/
-
-# Private config
-# config/private.exs
