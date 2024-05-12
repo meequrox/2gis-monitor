@@ -341,19 +341,20 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     |> append_username(event)
     |> append_comment(event)
     |> append_feedback(event)
-    |> Telegex.Tools.safe_html()
     |> append_attachments(event)
+    |> Telegex.Tools.safe_html()
     |> append_link(event)
+    |> append_geo(event)
   end
 
   defp create_meta(%{:timestamp => ts, :type => type}) when is_integer(ts) and is_binary(type) do
-    "#{type_to_emoji(type)} #{timestamp_to_local_dt(ts)}"
+    "#{type_to_emoji(type)} #{timestamp_to_local_dt(ts)}\n"
   end
 
   defp create_meta(_e), do: ""
 
   defp append_username(msg, %{:username => username}) when is_binary(username) do
-    msg <> "\n#{username}\n"
+    msg <> "#{username}\n"
   end
 
   defp append_username(msg, _e), do: msg
@@ -371,6 +372,13 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp append_feedback(msg, _e), do: msg
 
+  defp append_attachments(msg, %{:attachments => %{:count => count}})
+       when is_integer(count) and count > 0 do
+    msg <> "\n\nAttachments: #{count}\n"
+  end
+
+  defp append_attachments(msg, _e), do: msg
+
   defp append_link(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
        when is_float(lat) and is_float(lon) do
     env = Application.fetch_env!(:double_gis_monitor, :fetch)
@@ -385,12 +393,12 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp append_link(msg, _e), do: msg
 
-  defp append_attachments(msg, %{:attachments => %{:count => count}})
-       when is_integer(count) and count > 0 do
-    msg <> "\n\nAttachments: #{count}\n"
+  defp append_geo(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
+       when is_float(lat) and is_float(lon) do
+    msg <> "\t<span class=\"tg-spoiler\">#{lon},#{lat}</span>"
   end
 
-  defp append_attachments(msg, _e), do: msg
+  defp append_geo(msg, _e), do: msg
 
   defp type_to_emoji(type) when is_binary(type) do
     case type do
