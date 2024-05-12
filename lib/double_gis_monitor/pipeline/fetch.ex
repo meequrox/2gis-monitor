@@ -17,8 +17,8 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
       {:ok, events} ->
         fetch_attachments(events)
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, error} ->
+        {:error, error}
     end
   end
 

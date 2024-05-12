@@ -86,11 +86,13 @@ defmodule DoubleGisMonitor.WorkerManager do
   def work() do
     Logger.info("Pipeline started.")
 
-    {:ok, fetched_events} = Pipeline.Fetch.call()
-    {:ok, processed_events} = Pipeline.Process.call(fetched_events)
-    {:ok, _dispatched_events} = Pipeline.Dispatch.call(processed_events)
-
-    Logger.info("Pipeline passed!")
+    with {:ok, fetched_events} <- Pipeline.Fetch.call(),
+         {:ok, processed_events} <- Pipeline.Process.call(fetched_events),
+         {:ok, _dispatched_events} <- Pipeline.Dispatch.call(processed_events) do
+      Logger.info("Pipeline passed.")
+    else
+      {:error, error} -> Logger.info("Pipeline failed on #{error}!")
+    end
   end
 
   defp schedule_tick() do
