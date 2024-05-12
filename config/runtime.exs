@@ -77,7 +77,6 @@ if not is_nil(log_dir) and String.length(log_dir) > 0 do
   config(:logger,
     backends: [
       {LoggerFileBackend, :info_log},
-      {LoggerFileBackend, :warning_log},
       {LoggerFileBackend, :error_log},
       :console
     ]
@@ -88,13 +87,6 @@ if not is_nil(log_dir) and String.length(log_dir) > 0 do
     metadata: [:registered_name, :pid, :mfa],
     level: :info,
     path: log_dir <> "/info.log"
-  )
-
-  config(:logger, :warning_log,
-    format: "[$date] [$time] [$level] $metadata: $message\n",
-    metadata: [:registered_name, :pid, :mfa],
-    level: :warning,
-    path: log_dir <> "/warning.log"
   )
 
   config(:logger, :error_log,
