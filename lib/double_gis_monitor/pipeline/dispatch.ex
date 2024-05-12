@@ -395,7 +395,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp append_geo(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
        when is_float(lat) and is_float(lon) do
-    msg <> "\t<span class=\"tg-spoiler\">#{lon},#{lat}</span>"
+    msg <> " <span class=\"tg-spoiler\">#{Float.round(lat, 6)}, #{Float.round(lon, 6)}</span>"
   end
 
   defp append_geo(msg, _e), do: msg
