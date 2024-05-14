@@ -10,44 +10,25 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
   alias DoubleGisMonitor.RateLimiter
 
   @api_uri "tugc.2gis.com"
+  @max_retries 3
 
-  @spec call() :: {:ok, list(map())} | {:error, atom()}
+  @spec call() :: {:ok, list(map())} | {:error, any()}
   def call() do
-    case fetch_events() do
+    headers = build_request_headers()
+
+    case :events |> build_request_url() |> request_events(headers) do
       {:ok, events} ->
-        fetch_attachments(events)
+        events_with_attachments = fetch_attachments(events, headers)
+
+        Logger.info(
+          "Fetch complete: received #{Enum.count(events_with_attachments)} events from #{@api_uri}."
+        )
+
+        {:ok, events_with_attachments}
 
       {:error, error} ->
+        Logger.info("Fetch failed: #{inspect(error)}.")
         {:error, error}
-    end
-  end
-
-  defp fetch_events() do
-    with {:ok, url} <- build_request_url(:events),
-         {:ok, headers} <- build_request_headers(),
-         {:ok, events} <- request_events(url, headers) do
-      Logger.info("Received #{Enum.count(events)} events from server.")
-      {:ok, events}
-    else
-      {:error, {:build_request_url, :missing_fetch_config}} ->
-        Logger.error("There is no configuration for fetching. See config/config.exs file.")
-        {:error, :config}
-
-      {:error, {:request_events, {:get, reason}}} ->
-        Logger.error("GET request failed: #{inspect(reason)}.")
-        {:error, :request}
-
-      {:error, {:request_events, {:get, err_code, err_url}}} ->
-        Logger.error("Received #{err_code} response from #{err_url}.")
-        {:error, :response}
-
-      {:error, {:request_events, {:decode, tok, pos}}} ->
-        Logger.error("Received invalid JSON: token #{inspect(tok)} at position #{pos}.")
-        {:error, :decode}
-
-      other ->
-        Logger.critical("Unhandled result: #{inspect(other)}")
-        {:error, :undefined}
     end
   end
 
@@ -59,93 +40,66 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
          {:ok, events} <- Jason.decode(resp.body) do
       {:ok, events}
     else
-      {:error, %HTTPoison.Error{:reason => reason}} ->
+      {:error, error} ->
         case attempt do
-          3 ->
-            {:error, {:request_events, {:get, reason}}}
+          @max_retries ->
+            {:error, error}
 
           below ->
-            Logger.warning("GET request to #{url} failed. Retrying...")
+            Logger.error("Failed to fetch events list: #{inspect(error)}. Retrying...")
 
             RateLimiter.sleep_before(__MODULE__, :retry)
             request_events(url, headers, below + 1)
         end
-
-      {:error, {:ensure_good_response, err_code, err_url}} ->
-        case attempt do
-          3 ->
-            {:error, {:request_events, {:get, err_code, err_url}}}
-
-          below ->
-            Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
-
-            RateLimiter.sleep_before(__MODULE__, :retry)
-            request_events(url, headers, below + 1)
-        end
-
-      {:error, %Jason.DecodeError{:token => tok, :position => pos}} ->
-        {:error, {:request_events, {:decode, tok, pos}}}
-
-      other ->
-        other
     end
   end
 
-  defp fetch_attachments(events) when is_list(events) do
-    result =
-      for event <- events do
-        with {:ok, url} <- build_request_url(:attachments, event),
-             {:ok, headers} <- build_request_headers(),
-             {:ok, {count, list}} <- request_attachments(url, headers) do
-          Map.put(event, "attachments", {count, list})
+  defp fetch_attachments(events, headers) when is_list(events) and is_list(headers) do
+    map_fun = fn
+      %{"id" => id} = event ->
+        case :attachments |> build_request_url(event) |> request_attachments(headers) do
+          {:ok, {count, list}} ->
+            Map.put(event, "attachments", {count, list})
+
+          {:error, error} ->
+            Logger.error(
+              "Failed to fetch attachments for #{id}: #{inspect(error)}. Event will be ignored."
+            )
+
+            nil
         end
-      end
 
-    Logger.info("Received attachments for #{Enum.count(result)} events from server.")
+      _ ->
+        nil
+    end
 
-    {:ok, result}
+    Enum.map(events, map_fun) |> Enum.filter(fn event -> not is_nil(event) end)
   end
 
   defp request_attachments(url, headers, attempt \\ 0)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
     with :ok <- RateLimiter.sleep_before(__MODULE__, :request),
          {:ok, resp} <- HTTPoison.get(url, headers),
-         {:ok, _code} <- ensure_good_response(resp),
+         {:ok, _} <- ensure_good_response(resp),
          {:ok, map_list} <- Jason.decode(resp.body) do
       url_list = Enum.map(map_list, fn %{"url" => url} -> url end)
 
       {:ok, {Enum.count(url_list), url_list}}
     else
-      {:error, %HTTPoison.Error{:reason => _reason}} ->
+      {:error, {:response, 204, _}} ->
+        {:ok, {0, []}}
+
+      {:error, error} ->
         case attempt do
-          3 ->
-            {:ok, {0, []}}
+          @max_retries ->
+            {:error, error}
 
           below ->
-            Logger.warning("GET request to #{url} failed. Retrying...")
+            Logger.error("Failed to request attachments: #{inspect(error)}. Retrying...")
 
             RateLimiter.sleep_before(__MODULE__, :retry)
             request_attachments(url, headers, below + 1)
         end
-
-      {:error, {:ensure_good_response, 204, _url}} ->
-        {:ok, {0, []}}
-
-      {:error, {:ensure_good_response, err_code, err_url}} ->
-        case attempt do
-          3 ->
-            {:ok, {0, []}}
-
-          below ->
-            Logger.warning("Received invalid #{err_code} response from #{err_url}. Retrying...")
-
-            RateLimiter.sleep_before(__MODULE__, :retry)
-            request_attachments(url, headers, below + 1)
-        end
-
-      {:error, any} ->
-        Logger.error("Failed to request attachments: #{inspect(any)}.")
-        {:ok, {0, []}}
     end
   end
 
@@ -156,7 +110,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
         {:ok, 200}
 
       other ->
-        {:error, {:ensure_good_response, other, url}}
+        {:error, {:response, other, url}}
     end
   end
 
@@ -166,7 +120,7 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
     ua =
       "Mozilla/5.0 (Linux; Android 13.2; Pixel 6 XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.1757.81 Mobile Safari/537.36"
 
-    headers = [
+    [
       {"Accept", "application/json"},
       {"Accept-Encoding", "identity"},
       {"Accept-Language", "ru,en-US;q=0.5"},
@@ -180,41 +134,28 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
       {"Sec-Fetch-Site", "cross-site"},
       {"User-Agent", ua}
     ]
-
-    {:ok, headers}
   end
 
   defp build_request_url(:events) do
     env = Application.fetch_env!(:double_gis_monitor, :fetch)
+    [city: city, layers: layers] = Keyword.take(env, [:city, :layers])
 
-    case Keyword.take(env, [:city, :layers]) do
-      [city: city, layers: layers] ->
-        params = %{
-          project: String.downcase(city),
-          layers: "[\"" <> convert_layers(layers) <> "\"]"
-        }
+    layers_str =
+      layers
+      |> Enum.uniq()
+      |> Enum.filter(fn x -> valid_layer?(x) end)
+      |> Enum.join("\",\"")
 
-        url = HTTPoison.Base.build_request_url("https://#{@api_uri}/1.0/layers/user", params)
+    params = %{
+      project: String.downcase(city),
+      layers: "[\"" <> layers_str <> "\"]"
+    }
 
-        {:ok, url}
-
-      _other ->
-        {:error, {:build_request_url, :missing_fetch_config}}
-    end
+    HTTPoison.Base.build_request_url("https://#{@api_uri}/1.0/layers/user", params)
   end
 
   defp build_request_url(:attachments, %{"id" => id}) when is_binary(id) do
-    params = %{id: id}
-    url = HTTPoison.Base.build_request_url("https://#{@api_uri}/1.0/event/photo", params)
-
-    {:ok, url}
-  end
-
-  defp convert_layers(layers) when is_list(layers) do
-    layers
-    |> Enum.uniq()
-    |> Enum.filter(fn x -> valid_layer?(x) end)
-    |> Enum.join("\",\"")
+    HTTPoison.Base.build_request_url("https://#{@api_uri}/1.0/event/photo", %{id: id})
   end
 
   defp valid_layer?(layer) when is_binary(layer) do
@@ -222,4 +163,6 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
 
     Enum.member?(valid_layers, layer)
   end
+
+  defp valid_layer?(_), do: false
 end
