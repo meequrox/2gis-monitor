@@ -86,6 +86,8 @@ if not is_nil(log_dir) and String.length(log_dir) > 0 do
     format: "[$date] [$time] [$level] $metadata: $message\n",
     metadata: [:registered_name, :pid, :mfa],
     level: :info,
+    truncate: :infinity,
+    max_file_size: 104_857_600,
     path: log_dir <> "/info.log"
   )
 
@@ -93,6 +95,8 @@ if not is_nil(log_dir) and String.length(log_dir) > 0 do
     format: "[$date] [$time] [$level] $metadata: $message\n",
     metadata: [:registered_name, :pid, :mfa],
     level: :error,
+    truncate: :infinity,
+    max_file_size: 104_857_600,
     path: log_dir <> "/error.log"
   )
 end
