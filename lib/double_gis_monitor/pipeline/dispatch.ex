@@ -255,17 +255,17 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   end
 
   defp update_message(
-         %{
-           :linked_messages => %Database.Message{
-             :type => type,
-             :count => count,
-             :list => [first_message_id | _rest]
-           }
-         } = event,
-         channel_id,
-         text,
-         attempt \\ 0
-       ) do
+        %{
+          :linked_messages => %Database.Message{
+            :type => type,
+            :count => count,
+            :list => [first_message_id | _rest]
+          }
+        } = event,
+        channel_id,
+        text,
+        attempt \\ 0
+      ) do
     case update_message_based_on_type({type, count}, channel_id, text, first_message_id) do
       {:ok, message} ->
         RateLimiter.sleep_after({:ok, message}, __MODULE__, :edit)
@@ -385,7 +385,6 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
     [city: city] = Keyword.take(env, [:city])
 
     params = %{m: "#{lon},#{lat}"}
-
     url = HTTPoison.Base.build_request_url("https://2gis.ru/#{city}", params) <> "/18?traffic="
 
     msg <> "\n<a href=\"#{url}\">Open in 2GIS</a>"
@@ -395,7 +394,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
   defp append_geo(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
        when is_float(lat) and is_float(lon) do
-    msg <> " <span class=\"tg-spoiler\">#{Float.round(lat, 6)}, #{Float.round(lon, 6)}</span>"
+    msg <> " | <code>#{Float.round(lat, 6)},#{Float.round(lon, 6)}</code>"
   end
 
   defp append_geo(msg, _e), do: msg
