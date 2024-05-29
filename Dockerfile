@@ -1,5 +1,5 @@
 # Stage 1: build
-FROM elixir:otp-26-slim AS builder
+FROM elixir:otp-26 AS builder
 
 ENV MIX_ENV=prod
 
@@ -23,13 +23,15 @@ RUN mix compile \
     && mix release --path /double_gis_monitor
 
 # Stage 2: release
-FROM debian:testing-slim AS runner
+FROM debian:stable-slim AS runner
+
+RUN apt-get update \
+    && apt-get install -y libssl3
 
 COPY --from=builder /double_gis_monitor /double_gis_monitor
 
 EXPOSE 4369
-
-ENV ERL_MAX_PORTS=32768
+ENV ERL_MAX_PORTS=1024
 
 ENTRYPOINT ["/double_gis_monitor/bin/double_gis_monitor"]
 CMD ["start"]

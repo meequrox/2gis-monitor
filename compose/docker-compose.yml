@@ -25,7 +25,7 @@ services:
         condition: service_healthy
 
   double_gis_monitor-db:
-    image: postgres:16-alpine
+    image: postgres:latest
     command: ["-c", "jit=off"]
     restart: unless-stopped
     environment:
@@ -33,7 +33,7 @@ services:
       POSTGRES_USER: "${POSTGRES_USER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - ./db:/var/lib/postgresql/data:rw
     ports:
       - 5432
     healthcheck:
