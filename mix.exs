@@ -25,12 +25,12 @@ defmodule DoubleGisMonitor.MixProject do
       {:httpoison, "~> 2.2"},
       {:jason, "~> 1.4"},
       {:ecto_sql, "~> 3.11"},
-      {:postgrex, "~> 0.17.5"},
-      {:time_zone_info, "~> 0.7.2"},
-      {:telegex, "~> 1.7"},
+      {:postgrex, "~> 0.18.0"},
+      {:time_zone_info, "~> 0.7.3"},
+      {:telegex, "~> 1.8"},
       {:logger_file_backend, "~> 0.0.14"},
       {:observer_cli, "~> 1.7"},
-      {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 end
