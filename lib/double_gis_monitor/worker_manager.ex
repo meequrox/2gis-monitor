@@ -91,7 +91,7 @@ defmodule DoubleGisMonitor.WorkerManager do
          {:ok, _dispatched_events} <- Pipeline.Dispatch.call(processed_events) do
       Logger.info("Pipeline passed.")
     else
-      {:error, error} -> Logger.info("Pipeline failed on #{error}!")
+      {:error, error} -> Logger.info("Pipeline failed on #{inspect(error)}!")
     end
   end
 
