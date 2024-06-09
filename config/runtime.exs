@@ -15,7 +15,7 @@ config(:double_gis_monitor, DoubleGisMonitor.Db.Repo,
   password: System.get_env("POSTGRES_PASSWORD", "postgres"),
   hostname: System.get_env("DGM_POSTGRES_HOSTNAME", "localhost"),
   port: System.get_env("DGM_POSTGRES_PORT", "5432") |> String.to_integer(),
-  log: :info
+  log: :debug
 )
 
 # ^^ Project DATABASE configuration ^^
@@ -88,7 +88,7 @@ if not is_nil(log_dir) and String.length(log_dir) > 0 do
     level: :info,
     truncate: :infinity,
     max_file_size: 104_857_600,
-    path: log_dir <> "/info.log"
+    path: Path.join(log_dir, "info.log")
   )
 
   config(:logger, :error_log,
@@ -97,7 +97,7 @@ if not is_nil(log_dir) and String.length(log_dir) > 0 do
     level: :error,
     truncate: :infinity,
     max_file_size: 104_857_600,
-    path: log_dir <> "/error.log"
+    path: Path.join(log_dir, "error.log")
   )
 end
 
