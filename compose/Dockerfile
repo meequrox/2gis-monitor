@@ -1,5 +1,5 @@
 # Stage 1: build
-FROM elixir:otp-26 AS builder
+FROM elixir:1.17-otp-27 AS builder
 
 ENV MIX_ENV=prod
 

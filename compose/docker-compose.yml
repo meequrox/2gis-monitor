@@ -2,7 +2,7 @@ services:
   double_gis_monitor:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: compose/Dockerfile
     restart: unless-stopped
     environment:
       DGM_TIMEZONE: "${DGM_TIMEZONE}"
