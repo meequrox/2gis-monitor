@@ -13,24 +13,26 @@ defmodule DoubleGisMonitor.Application do
   """
   @impl true
   def start(_type, _args) do
+    inspect_opts = [pretty: true]
+
     Logger.info(
-      "DGM configuration:\n#{:double_gis_monitor |> Application.get_all_env() |> inspect(pretty: true)}"
+      "DGM configuration:\n#{:double_gis_monitor |> Application.get_all_env() |> inspect(inspect_opts)}"
     )
 
     Logger.info(
-      "Telegex configuration:\n#{:telegex |> Application.get_all_env() |> inspect(pretty: true)}"
+      "Telegex configuration:\n#{:telegex |> Application.get_all_env() |> inspect(inspect_opts)}"
     )
 
     Logger.info(
-      "Logger configuration:\n#{:logger |> Application.get_all_env() |> inspect(pretty: true)}"
+      "Logger configuration:\n#{:logger |> Application.get_all_env() |> inspect(inspect_opts)}"
     )
 
     Logger.info("Working directory: #{File.cwd!()}")
 
-    children = :double_gis_monitor |> Application.fetch_env!(:env) |> get_children()
-
-    opts = [strategy: :one_for_one, name: __MODULE__.Supervisor]
-    Supervisor.start_link(children, opts)
+    :double_gis_monitor
+    |> Application.fetch_env!(:env)
+    |> get_children()
+    |> Supervisor.start_link(strategy: :one_for_one, name: __MODULE__.Supervisor)
   end
 
   @doc """
@@ -42,27 +44,30 @@ defmodule DoubleGisMonitor.Application do
   end
 
   defp get_children(env) when is_atom(env) do
-    case env do
-      :test ->
-        [
-          get_migrator(),
-          DoubleGisMonitor.Db.Repo
-        ]
+    base = [
+      get_migrator(env),
+      DoubleGisMonitor.Db.Repo
+    ]
 
-      _other ->
-        [
-          get_migrator(),
-          DoubleGisMonitor.Db.Repo,
-          DoubleGisMonitor.Bot.Telegram,
-          DoubleGisMonitor.WorkerManager
-        ]
-    end
+    rest =
+      case env do
+        :test ->
+          []
+
+        _other ->
+          [
+            DoubleGisMonitor.Bot.Telegram,
+            DoubleGisMonitor.WorkerManager
+          ]
+      end
+
+    base ++ rest
   end
 
-  defp get_migrator() do
+  defp get_migrator(env) do
     {Ecto.Migrator,
      repos: Application.fetch_env!(:double_gis_monitor, :ecto_repos),
      skip: System.get_env("SKIP_MIGRATIONS", "false") == "true",
-     log_migrator_sql: true}
+     log_migrator_sql: env != :prod}
   end
 end

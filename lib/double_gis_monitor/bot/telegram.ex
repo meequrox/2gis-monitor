@@ -14,8 +14,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   @impl true
   def on_boot() do
-    {:ok, true} = Telegex.delete_webhook()
-    RateLimiter.sleep_after(:ok, __MODULE__, :request)
+    {:ok, true} =
+      Telegex.delete_webhook()
+      |> RateLimiter.sleep_after(__MODULE__, :request)
 
     %Telegex.Polling.Config{
       interval: 5000,
@@ -25,14 +26,15 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   @impl true
   def on_init(_arg) do
-    commands =
+    {:ok, true} =
       [
         %TgType.BotCommand{command: "help", description: "Print all commands"},
         %TgType.BotCommand{command: "info", description: "Print service status"}
       ]
+      |> Telegex.set_my_commands()
+      |> RateLimiter.sleep_after(__MODULE__, :request)
 
-    {:ok, true} = Telegex.set_my_commands(commands)
-    RateLimiter.sleep_after(:ok, __MODULE__, :request)
+    :ok
   end
 
   @impl true
@@ -43,8 +45,8 @@ defmodule DoubleGisMonitor.Bot.Telegram do
             :chat => %TgType.Chat{:type => "channel", :id => update_channel_id} = chat
           } = message
       }) do
-    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
-    [channel_id: config_channel_id] = Keyword.take(env, [:channel_id])
+    {:ok, config_channel_id} =
+      :double_gis_monitor |> Application.fetch_env!(:dispatch) |> Keyword.fetch(:channel_id)
 
     if config_channel_id === update_channel_id do
       case text do
@@ -68,12 +70,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp handle_command(:help, %TgType.Chat{:id => channel_id}) do
-    {:ok, commands} = Telegex.get_my_commands()
-    RateLimiter.sleep_after(:ok, __MODULE__, :request)
+    {:ok, commands} = Telegex.get_my_commands() |> RateLimiter.sleep_after(__MODULE__, :request)
 
-    reply = commands_to_text(commands)
-
-    case Telegex.send_message(channel_id, reply) do
+    case Telegex.send_message(channel_id, commands_to_text(commands)) do
       {:ok, _message} ->
         RateLimiter.sleep_after(:ok, __MODULE__, :send)
 
@@ -83,23 +82,18 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp handle_command(:info, %TgType.Chat{:id => channel_id}) do
-    env = Application.fetch_env!(:double_gis_monitor, :fetch)
-
     [city: city, layers: layers, interval: interval] =
-      Keyword.take(env, [:city, :layers, :interval])
-
-    status = %{
-      city: String.capitalize(city),
-      layers: inspect(layers),
-      interval: interval,
-      events_count: Database.Repo.aggregate(Database.Event, :count)
-    }
+      :double_gis_monitor
+      |> Application.fetch_env!(:fetch)
+      |> Keyword.take([:city, :layers, :interval])
 
     reply =
-      "City: #{status.city}\n" <>
-        "Layers: #{status.layers}\n" <>
-        "Interval: #{status.interval} seconds\n" <>
-        "Events in database: #{status.events_count}\n"
+      """
+      City: #{String.capitalize(city)}
+      Layers: #{inspect(layers)}
+      Interval: #{interval} seconds
+      Events in database: #{Database.Repo.aggregate(Database.Event, :count)}
+      """
 
     case Telegex.send_message(channel_id, reply) do
       {:ok, _message} ->

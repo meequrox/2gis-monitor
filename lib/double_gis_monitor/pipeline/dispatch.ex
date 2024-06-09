@@ -255,17 +255,17 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   end
 
   defp update_message(
-        %{
-          :linked_messages => %Database.Message{
-            :type => type,
-            :count => count,
-            :list => [first_message_id | _rest]
-          }
-        } = event,
-        channel_id,
-        text,
-        attempt \\ 0
-      ) do
+         %{
+           :linked_messages => %Database.Message{
+             :type => type,
+             :count => count,
+             :list => [first_message_id | _rest]
+           }
+         } = event,
+         channel_id,
+         text,
+         attempt \\ 0
+       ) do
     case update_message_based_on_type({type, count}, channel_id, text, first_message_id) do
       {:ok, message} ->
         RateLimiter.sleep_after({:ok, message}, __MODULE__, :edit)

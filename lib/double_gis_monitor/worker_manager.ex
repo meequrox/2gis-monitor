@@ -12,6 +12,8 @@ defmodule DoubleGisMonitor.WorkerManager do
   alias DoubleGisMonitor.RateLimiter
   alias DoubleGisMonitor.Pipeline
 
+  @worker_name :pipeline_worker
+
   @spec child_spec() :: map()
   def child_spec() do
     %{
@@ -64,17 +66,15 @@ defmodule DoubleGisMonitor.WorkerManager do
   end
 
   defp spawn_worker(attempt \\ 0) do
-    name = :pipeline_worker
-
-    case Process.whereis(name) do
+    case Process.whereis(@worker_name) do
       nil ->
-        Logger.info("Spawn new pipeline worker #{name}.")
+        Logger.info("Spawn new pipeline worker #{@worker_name}.")
 
         pid = Process.spawn(__MODULE__, :work, [], [:link])
-        Process.register(pid, name)
+        Process.register(pid, @worker_name)
 
       pid ->
-        Logger.warning(
+        Logger.info(
           "[#{attempt}] The previous worker #{inspect(pid)} has not finished yet! Waiting..."
         )
 
@@ -91,13 +91,13 @@ defmodule DoubleGisMonitor.WorkerManager do
          {:ok, _dispatched_events} <- Pipeline.Dispatch.call(processed_events) do
       Logger.info("Pipeline passed.")
     else
-      {:error, error} -> Logger.info("Pipeline failed on #{inspect(error)}!")
+      {:error, error} -> Logger.error("Pipeline failed on #{inspect(error)}!")
     end
   end
 
   defp schedule_tick() do
-    env = Application.fetch_env!(:double_gis_monitor, :fetch)
-    [interval: interval] = Keyword.take(env, [:interval])
+    {:ok, interval} =
+      :double_gis_monitor |> Application.fetch_env!(:fetch) |> Keyword.fetch(:interval)
 
     Logger.info("Schedule next pipeline start in #{interval} seconds")
 
