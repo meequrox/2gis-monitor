@@ -1,12 +1,15 @@
 ![Logo](.github/images/logo-01.png)
 
-**2GIS Monitor** is a service that provides periodic fetching of events (aka comments) from the [2GIS map](https://2gis.ru) directly to your Telegram channel.
+**2GIS Monitor** is a service that provides periodic fetching of events (aka comments)
+from the [2GIS map](https://2gis.ru) directly to your Telegram channel.
 
 The idea for creating the project was our Telegram channel, in which we posted interesting or funny comments on the map.
 
-Interacting with the map and searching for comments manually takes a lot of time, especially since on some days the number of messages on the map can reach >150.
+Interacting with the map and searching for comments manually takes a lot of time, especially since on some days
+the number of messages on the map can reach >150.
 
-The service solves this problem in three stages (I call it *event pipeline*): receiving events **-->** working with the database **-->** sending messages to Telegram.
+The service solves this problem in four stages (I call it *event pipeline*):
+receiving events -> processing events -> dispatching messages (to Telegram) -> store them in database.
 
 ## Screenshots
 
@@ -22,7 +25,8 @@ The event pipeline runs at a specified time interval. Let's take a look at the s
 
 The city and types of events that need to be received are specified in the configuration file.
 
-The server requests information about events from 2GIS servers. Then, for each event, it receives attachments (added photos from users).
+The server requests information about events from 2GIS servers. Then, for each event, it receives attachments
+(added photos from users).
 
 ### Event handling
 
@@ -40,11 +44,15 @@ Events received from the server after some processing can have three statuses:
 
 The dispatcher's task is to transmit information about updated and inserted events to the Telegram user.
 
-The only option that works optimally and without problems is sending to a specified channel where the bot has access to send posts.
+The only option that works optimally and without problems is sending to a specified channel where the bot has access
+to send posts.
 
-There is also one technical limitation: if the event was first sent to the channel with, for example, one attachment, and when the next pipeline was launched, the number of attachments increased, then new photos will NOT be added to the post in Telegram.
+There is also one technical limitation: if the event was first sent to the channel with, for example, one attachment,
+and when the next pipeline was launched, the number of attachments increased,
+then new photos will NOT be added to the post in Telegram.
 
-All we can do in this situation is to place a mark at the beginning of the message indicating that the message has been updated.
+All we can do in this situation is to place a mark at the beginning of the message indicating that the message
+has been updated.
 
 #### Interaction with the bot
 
@@ -64,7 +72,8 @@ Downloading sources:
 ```
 
 Before proceeding to launch, you **MUST** set the required environment variables in the current shell.
-All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)** (yes, you will have to look at the comments in this file):
+All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**
+(yes, you will have to look at the comments in this file):
 
 ```bash
   DGM_TG_TOKEN="xxxxxxxxxx"
@@ -107,7 +116,8 @@ The project can be deployed in a Docker container.
 It is preferable to do this using Docker Compose, as it automatically passes the necessary variables to the application.
 
 Before starting the service, you **MUST** set the required environment variable values ​​in the .env file.
-All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)** (yes, you will have to look at the comments in this file):
+All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**
+(yes, you will have to look at the comments in this file):
 
 ```bash
   # Assuming we are in the root directory
