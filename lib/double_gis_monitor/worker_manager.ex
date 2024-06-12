@@ -10,7 +10,6 @@ defmodule DoubleGisMonitor.WorkerManager do
   require Logger
 
   alias DoubleGisMonitor.RateLimiter
-  alias DoubleGisMonitor.Pipeline
 
   @worker_name :pipeline_worker
 
@@ -43,7 +42,7 @@ defmodule DoubleGisMonitor.WorkerManager do
   def handle_call(request, from, state) do
     Logger.warning("Received unknown call from #{inspect(from)}: #{inspect(request)}")
 
-    {:reply, {:error, "Worker does not support calls"}, state}
+    {:reply, {:error, "Worker Manager does not support calls"}, state}
   end
 
   @impl true
@@ -70,8 +69,9 @@ defmodule DoubleGisMonitor.WorkerManager do
       nil ->
         Logger.info("Spawn new pipeline worker #{@worker_name}.")
 
-        pid = Process.spawn(__MODULE__, :work, [], [:link])
-        Process.register(pid, @worker_name)
+        DoubleGisMonitor.Worker
+        |> Process.spawn(:work, [], [:link])
+        |> Process.register(@worker_name)
 
       pid ->
         Logger.info(
@@ -83,21 +83,11 @@ defmodule DoubleGisMonitor.WorkerManager do
     end
   end
 
-  def work() do
-    Logger.info("Pipeline started.")
-
-    with {:ok, fetched_events} <- Pipeline.Fetch.call(),
-         {:ok, processed_events} <- Pipeline.Process.call(fetched_events),
-         {:ok, _dispatched_events} <- Pipeline.Dispatch.call(processed_events) do
-      Logger.info("Pipeline passed.")
-    else
-      {:error, error} -> Logger.error("Pipeline failed on #{inspect(error)}!")
-    end
-  end
-
   defp schedule_tick() do
     {:ok, interval} =
-      :double_gis_monitor |> Application.fetch_env!(:fetch) |> Keyword.fetch(:interval)
+      :double_gis_monitor
+      |> Application.fetch_env!(:fetch)
+      |> Keyword.fetch(:interval)
 
     Logger.info("Schedule next pipeline start in #{interval} seconds")
 

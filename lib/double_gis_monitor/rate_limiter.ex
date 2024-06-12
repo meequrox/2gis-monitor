@@ -16,7 +16,7 @@ defmodule DoubleGisMonitor.RateLimiter do
   require Logger
 
   @timeout_map %{
-    :"Elixir.DoubleGisMonitor.Worker" => %{init: 5000, spawn: 10_000},
+    :"Elixir.DoubleGisMonitor.WorkerManager" => %{init: 5000, spawn: 10_000},
     :"Elixir.DoubleGisMonitor.Pipeline.Fetch" => %{request: 100, retry: 2000},
     :"Elixir.DoubleGisMonitor.Pipeline.Dispatch" => %{
       send: 3100,
@@ -46,7 +46,7 @@ defmodule DoubleGisMonitor.RateLimiter do
   defp do_sleep({module, action, times}, when_) do
     timeout = get_timeout(module, action, times)
 
-    Logger.info("Sleeping #{timeout}ms for #{module} #{when_} #{action}.")
+    Logger.debug("Sleeping #{timeout}ms for #{module} #{when_} #{action}.")
     Process.sleep(timeout)
   end
 
