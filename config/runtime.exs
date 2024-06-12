@@ -67,38 +67,3 @@ config(:double_gis_monitor, :dispatch,
 )
 
 # ^^ Project BOT configuration ^^
-
-# vv Project LOGGING configuration vv
-# The default configuration can be changed by setting these environment variables when starting the application:
-#  DGM_LOG_DIR - path to directory to write log files
-log_dir = System.get_env("DGM_LOG_DIR", nil)
-
-if not is_nil(log_dir) and String.length(log_dir) > 0 do
-  config(:logger,
-    backends: [
-      {LoggerFileBackend, :info_log},
-      {LoggerFileBackend, :error_log},
-      :console
-    ]
-  )
-
-  config(:logger, :info_log,
-    format: "[$date] [$time] [$level] $metadata: $message\n",
-    metadata: [:registered_name, :pid, :mfa],
-    level: :info,
-    truncate: :infinity,
-    max_file_size: 104_857_600,
-    path: Path.join(log_dir, "info.log")
-  )
-
-  config(:logger, :error_log,
-    format: "[$date] [$time] [$level] $metadata: $message\n",
-    metadata: [:registered_name, :pid, :mfa],
-    level: :error,
-    truncate: :infinity,
-    max_file_size: 104_857_600,
-    path: Path.join(log_dir, "error.log")
-  )
-end
-
-# ^^ Project LOGGING configuration ^^
