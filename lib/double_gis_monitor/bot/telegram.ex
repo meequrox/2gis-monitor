@@ -9,7 +9,8 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   use Telegex.Polling.GenHandler
 
   alias DoubleGisMonitor.RateLimiter
-  alias DoubleGisMonitor.Db, as: Database
+  alias DoubleGisMonitor.Database
+  alias DoubleGisMonitor.WorkerTicker
   alias Telegex.Type, as: TgType
 
   @impl true
@@ -82,20 +83,56 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp handle_command(:info, %TgType.Chat{:id => channel_id}) do
-    [city: city, layers: layers, interval: interval] =
+    # TODO: get from one of Pipeline module
+    [city: city, layers: layers] =
       :double_gis_monitor
       |> Application.fetch_env!(:fetch)
-      |> Keyword.take([:city, :layers, :interval])
+      |> Keyword.take([:city, :layers])
+
+    runs_count =
+      case WorkerTicker.get_count() do
+        {:ok, count} -> count
+        _err -> :timeout
+      end
+
+    last_result =
+      case WorkerTicker.get_last_result() do
+        {:ok, result} -> inspect(result)
+        _err -> :timeout
+      end
+
+    interval =
+      case WorkerTicker.get_interval() do
+        {:ok, interval} -> interval
+        _err -> :timeout
+      end
 
     reply =
-      """
-      City: #{String.capitalize(city)}
-      Layers: #{inspect(layers)}
-      Interval: #{interval} seconds
-      Events in database: #{Database.Repo.aggregate(Database.Event, :count)}
-      """
+      [
+        {"Service",
+         """
+         City: #{String.capitalize(city)}
+         Layers: #{inspect(layers)}
+         """},
+        {"Worker",
+         """
+         Runs count: #{runs_count}
+         Last result: #{last_result}
+         Interval: #{interval} seconds
+         """},
+        {"Database",
+         """
+         Events count: #{Database.Repo.aggregate(Database.Event, :count)}
+         """}
+      ]
+      |> Enum.map_join(
+        "\n",
+        fn {section, props} ->
+          "<b>" <> section <> "</b>\n" <> Telegex.Tools.safe_html(props)
+        end
+      )
 
-    case Telegex.send_message(channel_id, reply) do
+    case Telegex.send_message(channel_id, reply, parse_mode: "HTML") do
       {:ok, _message} ->
         RateLimiter.sleep_after(:ok, __MODULE__, :send)
 

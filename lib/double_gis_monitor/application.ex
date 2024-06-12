@@ -46,7 +46,7 @@ defmodule DoubleGisMonitor.Application do
   defp get_children(env) when is_atom(env) do
     base = [
       get_migrator(env),
-      DoubleGisMonitor.Db.Repo
+      DoubleGisMonitor.Database.Repo
     ]
 
     rest =
@@ -57,7 +57,8 @@ defmodule DoubleGisMonitor.Application do
         _other ->
           [
             DoubleGisMonitor.Bot.Telegram,
-            DoubleGisMonitor.WorkerManager
+            DoubleGisMonitor.Worker,
+            DoubleGisMonitor.WorkerTicker
           ]
       end
 

@@ -16,7 +16,6 @@ defmodule DoubleGisMonitor.RateLimiter do
   require Logger
 
   @timeout_map %{
-    :"Elixir.DoubleGisMonitor.WorkerManager" => %{init: 5000, spawn: 10_000},
     :"Elixir.DoubleGisMonitor.Pipeline.Fetch" => %{request: 100, retry: 2000},
     :"Elixir.DoubleGisMonitor.Pipeline.Dispatch" => %{
       send: 3100,
