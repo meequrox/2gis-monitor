@@ -232,7 +232,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
     datetime =
       tz
-      |> DateTime.now!(TimeZoneInfo.TimeZoneDatabase)
+      |> DateTime.now!()
       |> Calendar.strftime("%d.%m.%y %H:%M:%S")
 
     map_fun =
@@ -276,6 +276,22 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
       {:error, error} ->
         handle_update_message_error(error, event, channel_id, text, attempt)
     end
+  end
+
+  defp handle_update_message_error(
+         %Telegex.RequestError{:reason => reason},
+         event,
+         channel_id,
+         text,
+         attempt
+       ) do
+    handle_update_message_error(
+      %Telegex.Error{error_code: 503, description: reason},
+      event,
+      channel_id,
+      text,
+      attempt
+    )
   end
 
   defp handle_update_message_error(
@@ -417,7 +433,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
 
     ts
     |> DateTime.from_unix!()
-    |> DateTime.shift_zone!(tz, TimeZoneInfo.TimeZoneDatabase)
+    |> DateTime.shift_zone!(tz)
     |> Calendar.strftime("%d.%m.%y %H:%M:%S")
   end
 

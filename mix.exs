@@ -21,15 +21,21 @@ defmodule DoubleGisMonitor.MixProject do
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
+    {timezone_mod, timezone_ver} =
+      case :os.type() do
+        {:unix, _name} -> {:zoneinfo, "~> 0.1.8"}
+        {:win32, _name} -> {:tz, "~> 0.26.5"}
+      end
+
     [
+      {timezone_mod, timezone_ver},
       {:httpoison, "~> 2.2"},
       {:jason, "~> 1.4"},
       {:ecto_sql, "~> 3.11"},
       {:postgrex, "~> 0.18.0"},
-      {:time_zone_info, "~> 0.7.3"},
       {:telegex, "~> 1.8"},
       {:logger_file_backend, "~> 0.0.14"},
-      {:observer_cli, "~> 1.7", only: [:dev, :test]},
+      {:observer_cli, "~> 1.7", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
