@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Db.Event do
+defmodule DoubleGisMonitor.Database.Event do
   @moduledoc """
   A struct representing a 2GIS event processed by the corresponding module.
   """

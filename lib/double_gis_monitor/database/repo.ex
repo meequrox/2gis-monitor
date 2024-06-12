@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Db.Repo do
+defmodule DoubleGisMonitor.Database.Repo do
   @moduledoc """
   Primary repo containing tables:
   - events

@@ -9,7 +9,7 @@ import Config
 #  POSTGRES_USER - user password
 #  DGM_POSTGRES_HOSTNAME - host where the Postgres instance is running
 #  DGM_POSTGRES_PORT - port that the Postgres instance listens to
-config(:double_gis_monitor, DoubleGisMonitor.Db.Repo,
+config(:double_gis_monitor, DoubleGisMonitor.Database.Repo,
   database: System.get_env("POSTGRES_DB", "double_gis_monitor_repo"),
   username: System.get_env("POSTGRES_USER", "postgres"),
   password: System.get_env("POSTGRES_PASSWORD", "postgres"),

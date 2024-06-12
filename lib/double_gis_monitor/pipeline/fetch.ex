@@ -159,9 +159,15 @@ defmodule DoubleGisMonitor.Pipeline.Fetch do
   end
 
   defp valid_layer?(layer) when is_binary(layer) do
-    valid_layers = ["camera", "comment", "crash", "other", "restriction", "roadwork"]
-
-    Enum.member?(valid_layers, layer)
+    [
+      "camera",
+      "comment",
+      "crash",
+      "other",
+      "restriction",
+      "roadwork"
+    ]
+    |> Enum.member?(layer)
   end
 
   defp valid_layer?(_), do: false

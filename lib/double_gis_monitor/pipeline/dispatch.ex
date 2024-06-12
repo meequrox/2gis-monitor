@@ -14,7 +14,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require Logger
 
   alias DoubleGisMonitor.RateLimiter
-  alias DoubleGisMonitor.Db, as: Database
+  alias DoubleGisMonitor.Database, as: Database
 
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}

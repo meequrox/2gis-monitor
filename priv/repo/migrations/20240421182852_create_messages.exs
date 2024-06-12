@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Db.Repo.Migrations.CreateMessages do
+defmodule DoubleGisMonitor.Database.Repo.Migrations.CreateMessages do
   use Ecto.Migration
 
   def change() do

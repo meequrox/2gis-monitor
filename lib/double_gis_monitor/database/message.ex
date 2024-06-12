@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Db.Message do
+defmodule DoubleGisMonitor.Database.Message do
   @moduledoc """
   Struct that represent a ID list of Telegram messages being sent by dispatcher module.
 
