@@ -71,27 +71,19 @@ Downloading sources:
   cd 2gis-monitor
 ```
 
-Before proceeding to launch, you **MUST** set the required environment variables in the current shell.
-All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**
-(yes, you will have to look at the comments in this file):
-
-```bash
-  DGM_TG_TOKEN="xxxxxxxxxx"
-  DGM_TG_CHANNEL="-10xxxxxxxxxxx"
-  DGM_CITY="Omsk"
-  ...
-```
-
 Next, there are two ways to build and run the project:
 
 ### Launching a project "as is" in a development environment
 
 Basically, this method is used only during development.
 
+Before running the application, you **MUST** set the required environment variables in the `env.sh` file.
+All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**.
+
 ```bash
   mix deps.get
 
-  iex -S mix
+  ./start_dev.sh
 ```
 
 ### Build the production release and launch
@@ -100,13 +92,16 @@ This method is used if you need to build a self-contained release of the applica
 
 It should work **faster** by preloading all the code into memory.
 
+Before running the application, you **MUST** set the required environment variables in the `env.sh` file.
+All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**.
+
 ```bash
   MIX_ENV=prod
 
   mix deps.get --only prod
   mix release --path release/double_gis_monitor
 
-  ./release/double_gis_monitor/bin/double_gis_monitor start_iex
+  ./start_release.sh
 ```
 
 ## Deployment
@@ -115,9 +110,8 @@ The project can be deployed in a Docker container.
 
 It is preferable to do this using Docker Compose, as it automatically passes the necessary variables to the application.
 
-Before starting the service, you **MUST** set the required environment variable values ​​in the .env file.
-All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**
-(yes, you will have to look at the comments in this file):
+Before starting the service, you **MUST** set the required environment variable values ​​in the `.env` file.
+All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**.
 
 ```bash
   # Assuming we are in the root directory
