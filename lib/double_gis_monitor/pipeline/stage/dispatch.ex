@@ -15,12 +15,17 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
   alias DoubleGisMonitor.{RateLimiter, Database}
 
-  @spec call(%{update: list(map()), insert: list(map())}) ::
+  @spec run(%{update: list(map()), insert: list(map())}, map()) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
-  def call(%{:update => updated_events, :insert => inserted_events})
-      when is_list(updated_events) and is_list(inserted_events) do
-    with {:ok, updated_messages} <- dispatch(:update, updated_events),
-         {:ok, inserted_messages} <- dispatch(:insert, inserted_events) do
+  def run(%{:update => updated_events, :insert => inserted_events}, %{
+        city: city,
+        channel_id: channel_id,
+        timezone: timezone
+      }) do
+    # TODO: Reduce arguments count
+    with {:ok, updated_messages} <- dispatch(:update, updated_events, timezone, channel_id, city),
+         {:ok, inserted_messages} <-
+           dispatch(:insert, inserted_events, channel_id, timezone, city) do
       "#{Enum.count(updated_messages)} updates and #{Enum.count(inserted_messages)} new messages dispatched."
       |> Logger.info()
 
@@ -32,8 +37,8 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     end
   end
 
-  defp dispatch(:insert, events) when is_list(events) do
-    with {:ok, sent_messages} <- send_messages(events),
+  defp dispatch(:insert, events, channel_id, timezone, city) do
+    with {:ok, sent_messages} <- send_messages(events, channel_id, timezone, city),
          {:ok, inserted_messages} <- insert_messages(sent_messages) do
       {:ok, inserted_messages}
     else
@@ -41,9 +46,9 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     end
   end
 
-  defp dispatch(:update, events) when is_list(events) do
+  defp dispatch(:update, events, tz, channel_id, city) do
     with {:ok, linked_events} <- link_updates_with_messages(events),
-         {:ok, messages} <- update_messages(linked_events) do
+         {:ok, messages} <- update_messages(linked_events, tz, channel_id, city) do
       {:ok, messages}
     else
       error -> error
@@ -71,13 +76,10 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     end
   end
 
-  defp send_messages(events) when is_list(events) do
-    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
-    [channel_id: channel_id] = Keyword.take(env, [:channel_id])
-
+  defp send_messages(events, channel_id, timezone, city) when is_list(events) do
     map_fun =
       fn event ->
-        case send_event_message(channel_id, event) do
+        case send_event_message(channel_id, event, timezone, city) do
           {:ok, db_message} ->
             db_message
 
@@ -96,15 +98,16 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
   defp send_event_message(
          channel_id,
-         %Database.Event{:attachments => %{:count => attachments_count}} = event
-       )
-       when is_integer(channel_id) and is_integer(attachments_count) do
+         %Database.Event{:attachments => %{:count => attachments_count}} = event,
+         timezone,
+         city
+       ) do
     case attachments_count do
       0 ->
-        send_event_single_message(channel_id, event)
+        send_event_single_message(channel_id, event, timezone, city)
 
       _greater ->
-        send_event_group_message(channel_id, event)
+        send_event_group_message(channel_id, event, timezone, city)
     end
   end
 
@@ -112,6 +115,8 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
          channel_id,
          %Database.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
            event,
+         timezone,
+         city,
          attempt \\ 0
        )
        when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) and
@@ -119,7 +124,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     link_preview_opts = %Telegex.Type.LinkPreviewOptions{is_disabled: true}
     opts = [parse_mode: "HTML", link_preview_options: link_preview_opts]
 
-    text = prepare_text(event)
+    text = prepare_text(event, timezone, city)
 
     case Telegex.send_message(channel_id, text, opts) do
       {:ok, %Telegex.Type.Message{:message_id => message_id}} ->
@@ -141,7 +146,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
             Logger.warning("Failed to send single message for event #{uuid}. Retrying...")
 
             RateLimiter.sleep_before(__MODULE__, :retry)
-            send_event_single_message(channel_id, event, below + 1)
+            send_event_single_message(channel_id, event, timezone, city, below + 1)
         end
     end
   end
@@ -150,11 +155,13 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
          channel_id,
          %Database.Event{:uuid => uuid, :attachments => %{:count => attachments_count}} =
            event,
+         timezone,
+         city,
          attempt \\ 0
        )
        when is_integer(channel_id) and is_binary(uuid) and is_integer(attachments_count) and
               is_integer(attempt) do
-    text = prepare_text(event)
+    text = prepare_text(event, timezone, city)
     media = build_media(event, text)
 
     case Telegex.send_media_group(channel_id, media) do
@@ -185,7 +192,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
             Logger.warning("Failed to send media group for event #{uuid}. Retrying...")
 
             RateLimiter.sleep_before(__MODULE__, :retry)
-            send_event_group_message(channel_id, event, below + 1)
+            send_event_group_message(channel_id, event, timezone, city, below + 1)
         end
     end
   end
@@ -225,18 +232,16 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     end
   end
 
-  defp update_messages(events) when is_list(events) do
-    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
-    [timezone: tz, channel_id: channel_id] = Keyword.take(env, [:timezone, :channel_id])
-
+  defp update_messages(events, timezone, channel_id, city)
+       when is_list(events) and is_binary(timezone) and is_integer(channel_id) do
     datetime =
-      tz
+      timezone
       |> DateTime.now!()
       |> Calendar.strftime("%d.%m.%y %H:%M:%S")
 
     map_fun =
       fn event ->
-        text = "🔄 Updated at " <> datetime <> " 🔄\n\n" <> prepare_text(event)
+        text = "🔄 Updated at " <> datetime <> " 🔄\n\n" <> prepare_text(event, timezone, city)
 
         case update_message(event, channel_id, text) do
           {:error, error} ->
@@ -351,22 +356,22 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     end
   end
 
-  defp prepare_text(event) when is_map(event) do
-    create_meta(event)
+  defp prepare_text(event, timezone, city) when is_map(event) do
+    create_meta(event, timezone)
     |> append_username(event)
     |> append_comment(event)
     |> append_feedback(event)
     |> append_attachments(event)
     |> Telegex.Tools.safe_html()
-    |> append_link(event)
+    |> append_link(event, city)
     |> append_geo(event)
   end
 
-  defp create_meta(%{:timestamp => ts, :type => type}) when is_integer(ts) and is_binary(type) do
-    "#{type_to_emoji(type)} #{timestamp_to_local_dt(ts)}\n"
+  defp create_meta(%{:timestamp => timestamp, :type => type}, timezone) when is_binary(type) do
+    "#{type_to_emoji(type)} #{timestamp_to_local_dt(timestamp, timezone)}\n"
   end
 
-  defp create_meta(_e), do: ""
+  defp create_meta(_e, _), do: ""
 
   defp append_username(msg, %{:username => username}) when is_binary(username) do
     msg <> "#{username}\n"
@@ -394,18 +399,15 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
   defp append_attachments(msg, _e), do: msg
 
-  defp append_link(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
-       when is_float(lat) and is_float(lon) do
-    env = Application.fetch_env!(:double_gis_monitor, :fetch)
-    [city: city] = Keyword.take(env, [:city])
-
+  defp append_link(msg, %{:coordinates => %{:lat => lat, :lon => lon}}, city)
+       when is_float(lat) and is_float(lon) and is_binary(city) do
     params = %{m: "#{lon},#{lat}"}
     url = HTTPoison.Base.build_request_url("https://2gis.ru/#{city}", params) <> "/18?traffic="
 
     msg <> "\n<a href=\"#{url}\">Open in 2GIS</a>"
   end
 
-  defp append_link(msg, _e), do: msg
+  defp append_link(msg, _e, _), do: msg
 
   defp append_geo(msg, %{:coordinates => %{:lat => lat, :lon => lon}})
        when is_float(lat) and is_float(lon) do
@@ -426,13 +428,11 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     end
   end
 
-  defp timestamp_to_local_dt(ts) when is_integer(ts) do
-    env = Application.fetch_env!(:double_gis_monitor, :dispatch)
-    [timezone: tz] = Keyword.take(env, [:timezone])
-
-    ts
+  defp timestamp_to_local_dt(timestamp, timezone)
+       when is_integer(timestamp) and is_binary(timezone) do
+    timestamp
     |> DateTime.from_unix!()
-    |> DateTime.shift_zone!(tz)
+    |> DateTime.shift_zone!(timezone)
     |> Calendar.strftime("%d.%m.%y %H:%M:%S")
   end
 

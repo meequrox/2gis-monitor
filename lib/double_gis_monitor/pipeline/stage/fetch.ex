@@ -12,11 +12,11 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   @api_uri "tugc.2gis.com"
   @max_retries 3
 
-  @spec call() :: {:ok, list(map())} | {:error, any()}
-  def call() do
+  @spec run(map()) :: {:ok, list(map())} | {:error, any()}
+  def run(%{city: city, layers: layers}) do
     headers = build_request_headers()
 
-    case :events |> build_request_url() |> request_events(headers) do
+    case :events |> build_request_url(city, layers) |> request_events(headers) do
       {:ok, events} ->
         events_with_attachments = fetch_attachments(events, headers)
 
@@ -33,7 +33,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   end
 
   defp request_events(url, headers, attempt \\ 0)
-       when is_binary(url) and is_list(headers) and is_integer(attempt) do
+       when is_list(headers) and is_integer(attempt) do
     with :ok <- RateLimiter.sleep_before(__MODULE__, :request),
          {:ok, resp} <- HTTPoison.get(url, headers),
          {:ok, _code} <- ensure_good_response(resp),
@@ -54,7 +54,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
     end
   end
 
-  defp fetch_attachments(events, headers) when is_list(events) and is_list(headers) do
+  defp fetch_attachments(events, headers) when is_list(events) do
     map_fun = fn
       %{"id" => id} = event ->
         case :attachments |> build_request_url(event) |> request_attachments(headers) do
@@ -104,7 +104,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   end
 
   defp ensure_good_response(%{:status_code => code, :request_url => url})
-       when is_integer(code) and is_binary(url) do
+       when is_integer(code) do
     case code do
       200 ->
         {:ok, 200}
@@ -136,10 +136,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
     ]
   end
 
-  defp build_request_url(:events) do
-    env = Application.fetch_env!(:double_gis_monitor, :fetch)
-    [city: city, layers: layers] = Keyword.take(env, [:city, :layers])
-
+  defp build_request_url(:events, city, layers) when is_binary(city) and is_list(layers) do
     layers_str =
       layers
       |> Enum.uniq()

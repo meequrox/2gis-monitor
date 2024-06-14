@@ -23,9 +23,9 @@ defmodule DoubleGisMonitor.Pipeline.Worker do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec start_pipeline() :: :ok
-  def start_pipeline() do
-    GenServer.cast(__MODULE__, {:start, :pipeline})
+  @spec start_pipeline(map()) :: :ok
+  def start_pipeline(opts) do
+    GenServer.cast(__MODULE__, {:start, {:pipeline, opts}})
   end
 
   @impl true
@@ -41,15 +41,16 @@ defmodule DoubleGisMonitor.Pipeline.Worker do
   end
 
   @impl true
-  def handle_cast({:start, :pipeline}, state) do
-    # TODO: Get opts for stages from request
-    # TODO: Pass opts for stages in call()
-
+  def handle_cast(
+        {:start,
+         {:pipeline, %{fetch: fetch_opts, process: process_opts, dispatch: dispatch_opts}}},
+        state
+      ) do
     with :ok <- Logger.info("Start pipeline"),
-         {:ok, fetched} <- Stage.Fetch.call(),
-         {:ok, processed} <- Stage.Process.call(fetched),
+         {:ok, fetched} <- Stage.Fetch.run(fetch_opts),
+         {:ok, processed} <- Stage.Process.run(fetched, process_opts),
          {:ok, %{update: updated, insert: inserted}} <-
-           Stage.Dispatch.call(processed),
+           Stage.Dispatch.run(processed, dispatch_opts),
          :ok <- Logger.info("End pipeline") do
       {:ok, %{update: Enum.count(updated), insert: Enum.count(inserted)}}
     else

@@ -12,12 +12,11 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
 
   alias DoubleGisMonitor.Database
 
-  @spec call(list(map())) :: {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
-  def call(events) when is_list(events), do: process(events)
-
-  defp process(events) when is_list(events) do
+  @spec run(list(map()), map()) ::
+          {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
+  def run(events, %{interval: interval}) do
     with {:ok, new_events} <- convert_events_to_db(events),
-         {:ok, outdated_db_events} <- get_outdated_events(),
+         {:ok, outdated_db_events} <- get_outdated_events(interval),
          {:ok, db_events_to_delete} <- find_disappeared_events(new_events, outdated_db_events),
          {:ok, deleted_events} <- delete_outdated_events(db_events_to_delete),
          {:ok, _deleted_messages} <- delete_outdated_messages(deleted_events),
@@ -49,7 +48,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
     end
   end
 
-  defp fix_result_map(result_map) when is_map(result_map) do
+  defp fix_result_map(result_map) do
     new_map =
       result_map
       |> Map.update(:update, [], fn existing -> existing end)
@@ -228,10 +227,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
     {:ok, outdated_events}
   end
 
-  defp get_outdated_events() do
-    env = Application.fetch_env!(:double_gis_monitor, :fetch)
-    [interval: interval] = Keyword.take(env, [:interval])
-
+  defp get_outdated_events(interval) when is_integer(interval) do
     ts_now = DateTime.utc_now() |> DateTime.to_unix()
 
     events =

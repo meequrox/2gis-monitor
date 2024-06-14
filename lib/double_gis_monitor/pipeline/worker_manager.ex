@@ -13,7 +13,10 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
 
   alias DoubleGisMonitor.Pipeline.Worker
 
-  defstruct count: 0, last_result: :null, interval: 86400
+  defstruct count: 0,
+            last_result: :null,
+            interval: 86400,
+            stages_opts: %{fetch: %{}, process: %{}, dispatch: %{}}
 
   @spec child_spec() :: map()
   def child_spec() do
@@ -53,16 +56,28 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
 
   @impl true
   def init(_init_arg) do
-    state =
-      case :double_gis_monitor |> Application.get_env(:fetch, []) |> Keyword.fetch(:interval) do
-        {:ok, seconds} when is_integer(seconds) ->
-          %__MODULE__{interval: seconds}
+    [city: city, layers: layers, interval: interval] =
+      :double_gis_monitor
+      |> Application.fetch_env!(:fetch)
+      |> Keyword.take([:city, :layers, :interval])
 
-        _err ->
-          %__MODULE__{}
-      end
+    [timezone: tz, channel_id: channel_id] =
+      :double_gis_monitor
+      |> Application.fetch_env!(:dispatch)
+      |> Keyword.take([:timezone, :channel_id])
 
-    # TODO: Put opts for stages in state
+    stages_opts = %{
+      fetch: %{city: city, layers: layers},
+      process: %{interval: interval},
+      dispatch: %{channel_id: channel_id, city: city, timezone: tz}
+    }
+
+    state = %__MODULE__{
+      interval: interval,
+      stages_opts: stages_opts
+    }
+
+    Logger.info("Pipeline stages options: #{inspect(stages_opts, pretty: true)}")
 
     send(self(), {:do, :tick})
     {:ok, state}
@@ -104,9 +119,11 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
   end
 
   @impl true
-  def handle_info({:do, :tick}, %{interval: interval, count: count} = state) do
-    # TODO: Pass stages options to Worker
-    Worker.start_pipeline()
+  def handle_info(
+        {:do, :tick},
+        %{interval: interval, count: count, stages_opts: stages_opts} = state
+      ) do
+    Worker.start_pipeline(stages_opts)
     schedule_tick(interval)
 
     {:noreply, %{state | count: count + 1}}

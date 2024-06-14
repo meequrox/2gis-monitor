@@ -13,9 +13,14 @@ defmodule DoubleGisMonitor.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
+    opts = %{
+      env: Application.fetch_env!(:double_gis_monitor, :env),
+      ecto_repos: Application.fetch_env!(:double_gis_monitor, :ecto_repos)
+    }
+
     [
       extra_applications: [:logger],
-      mod: {DoubleGisMonitor.Application, []}
+      mod: {DoubleGisMonitor.Application, [opts]}
     ]
   end
 

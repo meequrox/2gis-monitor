@@ -12,40 +12,17 @@ defmodule DoubleGisMonitor.Application do
   This callback is responsible for starting its supervision tree.
   """
   @impl true
-  def start(_type, _args) do
-    inspect_opts = [pretty: true]
-
-    Logger.info(
-      "DGM configuration:\n#{:double_gis_monitor |> Application.get_all_env() |> inspect(inspect_opts)}"
-    )
-
-    Logger.info(
-      "Telegex configuration:\n#{:telegex |> Application.get_all_env() |> inspect(inspect_opts)}"
-    )
-
-    Logger.info(
-      "Logger configuration:\n#{:logger |> Application.get_all_env() |> inspect(inspect_opts)}"
-    )
-
+  def start(_type, [opts]) do
     Logger.info("Working directory: #{File.cwd!()}")
 
-    :double_gis_monitor
-    |> Application.fetch_env!(:env)
+    opts
     |> get_children()
     |> Supervisor.start_link(strategy: :one_for_one, name: __MODULE__.Supervisor)
   end
 
-  @doc """
-  This callback is called after its supervision tree has been stopped.
-  """
-  @impl true
-  def stop(_state) do
-    Logger.info("App stopped")
-  end
-
-  defp get_children(env) when is_atom(env) do
+  defp get_children(%{env: env} = opts) when is_atom(env) do
     base = [
-      get_migrator(env),
+      get_migrator(opts),
       DoubleGisMonitor.Database.Repo
     ]
 
@@ -65,9 +42,9 @@ defmodule DoubleGisMonitor.Application do
     base ++ rest
   end
 
-  defp get_migrator(env) do
+  defp get_migrator(%{env: env, ecto_repos: repos}) when is_atom(env) and is_list(repos) do
     {Ecto.Migrator,
-     repos: Application.fetch_env!(:double_gis_monitor, :ecto_repos),
+     repos: repos,
      skip: System.get_env("SKIP_MIGRATIONS", "false") == "true",
      log_migrator_sql: env != :prod}
   end
