@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Pipeline.Fetch do
+defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   @moduledoc """
   A pipeline module that receives raw data from 2GIS servers and decodes it into a list of Elixir maps (list of events).
 

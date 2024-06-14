@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Pipeline.Dispatch do
+defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
   @moduledoc """
   A pipeline module that receives a map of updated and inserted events and sends these changes to the Telegram bot.
 
@@ -13,8 +13,7 @@ defmodule DoubleGisMonitor.Pipeline.Dispatch do
   require DoubleGisMonitor.Bot.Telegram
   require Logger
 
-  alias DoubleGisMonitor.RateLimiter
-  alias DoubleGisMonitor.Database, as: Database
+  alias DoubleGisMonitor.{RateLimiter, Database}
 
   @spec call(%{update: list(map()), insert: list(map())}) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}

@@ -8,9 +8,8 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   use Telegex.Polling.GenHandler
 
-  alias DoubleGisMonitor.RateLimiter
-  alias DoubleGisMonitor.Database
-  alias DoubleGisMonitor.WorkerTicker
+  alias DoubleGisMonitor.{RateLimiter, Database}
+  alias DoubleGisMonitor.Pipeline.WorkerManager
   alias Telegex.Type, as: TgType
 
   @impl true
@@ -89,23 +88,10 @@ defmodule DoubleGisMonitor.Bot.Telegram do
       |> Application.fetch_env!(:fetch)
       |> Keyword.take([:city, :layers])
 
-    runs_count =
-      case WorkerTicker.get_count() do
-        {:ok, count} -> count
-        _err -> :timeout
-      end
-
-    last_result =
-      case WorkerTicker.get_last_result() do
-        {:ok, result} -> inspect(result)
-        _err -> :timeout
-      end
-
-    interval =
-      case WorkerTicker.get_interval() do
-        {:ok, interval} -> interval
-        _err -> :timeout
-      end
+    {:ok, runs_count} = WorkerManager.get_count()
+    {:ok, last_result} = WorkerManager.get_last_result()
+    {:ok, interval} = WorkerManager.get_interval()
+    # TODO: Get last result timestamp
 
     reply =
       [
@@ -117,7 +103,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
         {"Worker",
          """
          Runs count: #{runs_count}
-         Last result: #{last_result}
+         Last result: #{inspect(last_result)}
          Interval: #{interval} seconds
          """},
         {"Database",

@@ -16,15 +16,15 @@ defmodule DoubleGisMonitor.RateLimiter do
   require Logger
 
   @timeout_map %{
-    :"Elixir.DoubleGisMonitor.Pipeline.Fetch" => %{request: 100, retry: 2000},
-    :"Elixir.DoubleGisMonitor.Pipeline.Dispatch" => %{
+    Elixir.DoubleGisMonitor.Pipeline.Stage.Fetch => %{request: 100, retry: 2000},
+    Elixir.DoubleGisMonitor.Pipeline.Stage.Dispatch => %{
       send: 3100,
       edit: 3100,
       retry: 3000,
       request: 100,
       too_many_requests: 1000
     },
-    :"Elixir.DoubleGisMonitor.Bot.Telegram" => %{send: 3100, request: 100}
+    Elixir.DoubleGisMonitor.Bot.Telegram => %{send: 3100, request: 100}
   }
 
   @timeout_default 30

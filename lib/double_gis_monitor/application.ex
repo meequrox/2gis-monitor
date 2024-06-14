@@ -57,8 +57,8 @@ defmodule DoubleGisMonitor.Application do
         _other ->
           [
             DoubleGisMonitor.Bot.Telegram,
-            DoubleGisMonitor.Worker,
-            DoubleGisMonitor.WorkerTicker
+            DoubleGisMonitor.Pipeline.Worker,
+            DoubleGisMonitor.Pipeline.WorkerManager
           ]
       end
 

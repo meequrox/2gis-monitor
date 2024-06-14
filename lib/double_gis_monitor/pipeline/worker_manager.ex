@@ -1,15 +1,19 @@
-defmodule DoubleGisMonitor.WorkerTicker do
+defmodule DoubleGisMonitor.Pipeline.WorkerManager do
   @moduledoc """
-  Worker Ticker, which sends a command at a certain interval to start the event pipeline.
+  Worker Manager, which sends a command at a certain interval to start the event pipeline.
 
   Inspired by https://github.com/onboardingsystems/ticker
   """
+
+  # TODO: Update @moduledoc
 
   use GenServer
 
   require Logger
 
-  defstruct count: 0, last_result: :null, interval: 600
+  alias DoubleGisMonitor.Pipeline.Worker
+
+  defstruct count: 0, last_result: :null, interval: 86400
 
   @spec child_spec() :: map()
   def child_spec() do
@@ -32,7 +36,7 @@ defmodule DoubleGisMonitor.WorkerTicker do
     GenServer.call(__MODULE__, {:get, :count})
   end
 
-  @spec get_last_result() :: {:ok, tuple()} | {:error, any()}
+  @spec get_last_result() :: {:ok, any()} | {:error, any()}
   def get_last_result() do
     GenServer.call(__MODULE__, {:get, :last_result})
   end
@@ -52,11 +56,13 @@ defmodule DoubleGisMonitor.WorkerTicker do
     state =
       case :double_gis_monitor |> Application.get_env(:fetch, []) |> Keyword.fetch(:interval) do
         {:ok, seconds} when is_integer(seconds) ->
-          %DoubleGisMonitor.WorkerTicker{interval: seconds}
+          %__MODULE__{interval: seconds}
 
         _err ->
-          %DoubleGisMonitor.WorkerTicker{}
+          %__MODULE__{}
       end
+
+    # TODO: Put opts for stages in state
 
     send(self(), {:do, :tick})
     {:ok, state}
@@ -86,6 +92,7 @@ defmodule DoubleGisMonitor.WorkerTicker do
 
   @impl true
   def handle_cast({:set, {:last_result, result}}, state) do
+    # TODO: Also set last result timestamp
     {:noreply, %{state | last_result: result}}
   end
 
@@ -98,7 +105,8 @@ defmodule DoubleGisMonitor.WorkerTicker do
 
   @impl true
   def handle_info({:do, :tick}, %{interval: interval, count: count} = state) do
-    DoubleGisMonitor.Worker.start_pipeline()
+    # TODO: Pass stages options to Worker
+    Worker.start_pipeline()
     schedule_tick(interval)
 
     {:noreply, %{state | count: count + 1}}

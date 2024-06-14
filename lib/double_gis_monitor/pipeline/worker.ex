@@ -1,9 +1,11 @@
-defmodule DoubleGisMonitor.Worker do
+defmodule DoubleGisMonitor.Pipeline.Worker do
+  # TODO: Create @moduledoc
+
   use GenServer
 
   require Logger
 
-  alias DoubleGisMonitor.Pipeline
+  alias DoubleGisMonitor.Pipeline.{Stage, WorkerManager}
 
   @spec child_spec() :: map()
   def child_spec() do
@@ -40,11 +42,14 @@ defmodule DoubleGisMonitor.Worker do
 
   @impl true
   def handle_cast({:start, :pipeline}, state) do
+    # TODO: Get opts for stages from request
+    # TODO: Pass opts for stages in call()
+
     with :ok <- Logger.info("Start pipeline"),
-         {:ok, fetched} <- Pipeline.Fetch.call(),
-         {:ok, processed} <- Pipeline.Process.call(fetched),
+         {:ok, fetched} <- Stage.Fetch.call(),
+         {:ok, processed} <- Stage.Process.call(fetched),
          {:ok, %{update: updated, insert: inserted}} <-
-           Pipeline.Dispatch.call(processed),
+           Stage.Dispatch.call(processed),
          :ok <- Logger.info("End pipeline") do
       {:ok, %{update: Enum.count(updated), insert: Enum.count(inserted)}}
     else
@@ -56,7 +61,7 @@ defmodule DoubleGisMonitor.Worker do
         Logger.error("Pipeline produced unknown result: #{inspect(any)}")
         any
     end
-    |> DoubleGisMonitor.WorkerTicker.set_last_result()
+    |> WorkerManager.set_last_result()
 
     {:noreply, state}
   end

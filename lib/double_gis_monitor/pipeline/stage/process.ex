@@ -1,16 +1,16 @@
-defmodule DoubleGisMonitor.Pipeline.Process do
+defmodule DoubleGisMonitor.Pipeline.Stage.Process do
   @moduledoc """
   A pipeline module that receives a list of event maps with binary keys, applies various transformations to them, and then inserts or updates the corresponding database records.
 
   Before real processing begins, the database is cleaned.
-  If some event in the database was added N hours ago and is no longer displayed on the 2GIS map, it is deleted from the database.
+  If some event in the database was added N minutes ago and is no longer displayed on the 2GIS map, it is deleted from the database.
   """
 
   require Logger
 
   import Ecto.Query, only: [from: 2]
 
-  alias DoubleGisMonitor.Db, as: Database
+  alias DoubleGisMonitor.Database
 
   @spec call(list(map())) :: {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def call(events) when is_list(events), do: process(events)
@@ -151,10 +151,13 @@ defmodule DoubleGisMonitor.Pipeline.Process do
 
   defp delete_outdated_messages(events) when is_list(events) do
     map_fun =
-      fn %{:uuid => uuid} = event ->
+      fn %{:uuid => uuid} ->
         case Database.Repo.get(Database.Message, uuid) do
-          nil -> {:ok, event}
-          struct -> delete_outdated_event_messages(struct)
+          nil ->
+            nil
+
+          struct ->
+            delete_outdated_event_messages(:database, struct)
         end
       end
 
@@ -162,7 +165,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
 
     case Database.Repo.transaction(transaction_fun) do
       {:ok, deleted_messages} ->
-        {:ok, deleted_messages}
+        {:ok, deleted_messages |> Enum.filter(fn dm -> not is_nil(dm) end)}
 
       {:error, {:delete_outdated_event_messages, changeset}} ->
         Logger.error("Failed to delete outdated messages: #{inspect(changeset)}. Rolled back.")
@@ -170,7 +173,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
     end
   end
 
-  defp delete_outdated_event_messages(%{:uuid => uuid}) when is_binary(uuid) do
+  defp delete_outdated_event_messages(:database, %{:uuid => uuid}) when is_binary(uuid) do
     case Database.Repo.delete(%Database.Message{uuid: uuid},
            returning: false
          ) do
@@ -199,7 +202,7 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp delete_outdated_event(%{:uuid => uuid}) do
-    case Database.Repo.delete(%Database.Event{uuid: uuid}, returning: false) do
+    case Database.Repo.delete(%Database.Event{uuid: uuid}, returning: true) do
       {:ok, struct} ->
         struct
 
@@ -226,12 +229,14 @@ defmodule DoubleGisMonitor.Pipeline.Process do
   end
 
   defp get_outdated_events() do
+    env = Application.fetch_env!(:double_gis_monitor, :fetch)
+    [interval: interval] = Keyword.take(env, [:interval])
+
     ts_now = DateTime.utc_now() |> DateTime.to_unix()
-    outdate_hours = 6
 
     events =
       from(e in "events",
-        where: ^ts_now - e.timestamp > ^(outdate_hours * 3600),
+        where: ^ts_now - e.timestamp > ^((interval * 1.9) |> trunc()),
         select: [:uuid]
       )
       |> Database.Repo.all()
