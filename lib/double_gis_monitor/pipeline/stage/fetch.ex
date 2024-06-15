@@ -12,19 +12,16 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   @api_uri "tugc.2gis.com"
   @max_retries 3
 
-  @spec run(map()) :: {:ok, list(map())} | {:error, any()}
+  @spec run(map()) :: {:ok, list(map())} | {:error, term()}
   def run(%{city: city, layers: layers}) do
     headers = build_request_headers()
 
     case :events |> build_request_url(city, layers) |> request_events(headers) do
       {:ok, events} ->
-        events_with_attachments = fetch_attachments(events, headers)
+        events = fetch_attachments(events, headers)
 
-        Logger.info(
-          "Fetch complete: received #{Enum.count(events_with_attachments)} events from #{@api_uri}."
-        )
-
-        {:ok, events_with_attachments}
+        Logger.info("Fetch: #{Enum.count(events)} events <- #{@api_uri}.")
+        {:ok, events}
 
       {:error, error} ->
         Logger.info("Fetch failed: #{inspect(error)}.")
@@ -55,7 +52,8 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   end
 
   defp fetch_attachments(events, headers) when is_list(events) do
-    map_fun = fn
+    events
+    |> Enum.map(fn
       %{"id" => id} = event ->
         case :attachments |> build_request_url(event) |> request_attachments(headers) do
           {:ok, {count, list}} ->
@@ -63,7 +61,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
 
           {:error, error} ->
             Logger.error(
-              "Failed to fetch attachments for #{id}: #{inspect(error)}. Event will be ignored."
+              "Failed to fetch attachments for #{id}: #{inspect(error)}. Event ignored."
             )
 
             nil
@@ -71,16 +69,15 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
 
       _ ->
         nil
-    end
-
-    Enum.map(events, map_fun) |> Enum.filter(fn event -> not is_nil(event) end)
+    end)
+    |> Enum.filter(&is_map/1)
   end
 
   defp request_attachments(url, headers, attempt \\ 0)
        when is_binary(url) and is_list(headers) and is_integer(attempt) do
     with :ok <- RateLimiter.sleep_before(__MODULE__, :request),
          {:ok, resp} <- HTTPoison.get(url, headers),
-         {:ok, _} <- ensure_good_response(resp),
+         {:ok, _code} <- ensure_good_response(resp),
          {:ok, map_list} <- Jason.decode(resp.body) do
       url_list = Enum.map(map_list, fn %{"url" => url} -> url end)
 
@@ -103,8 +100,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
     end
   end
 
-  defp ensure_good_response(%{:status_code => code, :request_url => url})
-       when is_integer(code) do
+  defp ensure_good_response(%{:status_code => code, :request_url => url}) do
     case code do
       200 ->
         {:ok, 200}
@@ -155,7 +151,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
     HTTPoison.Base.build_request_url("https://#{@api_uri}/1.0/event/photo", %{id: id})
   end
 
-  defp valid_layer?(layer) when is_binary(layer) do
+  defp valid_layer?(layer) do
     [
       "camera",
       "comment",
@@ -166,6 +162,4 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
     ]
     |> Enum.member?(layer)
   end
-
-  defp valid_layer?(_), do: false
 end

@@ -1,16 +1,12 @@
 defmodule DoubleGisMonitor.Application do
   @moduledoc """
-  The main application to start a supervisor.
+  DoubleGisMonitor application
   """
 
   use Application
 
   require Logger
 
-  @doc """
-  Called when an application is started (usually from `Mix.Project.application/0`).
-  This callback is responsible for starting its supervision tree.
-  """
   @impl true
   def start(_type, _opts) do
     [city: city, layers: layers, interval: interval] =
@@ -23,9 +19,17 @@ defmodule DoubleGisMonitor.Application do
       |> Application.fetch_env!(:dispatch)
       |> Keyword.take([:timezone, :channel_id])
 
+    [skip: skip_migrations?] =
+      :double_gis_monitor
+      |> Application.fetch_env!(:ecto_migrations)
+      |> Keyword.take([:skip])
+
     opts = %{
       env: Application.fetch_env!(:double_gis_monitor, :env),
-      ecto_repos: Application.fetch_env!(:double_gis_monitor, :ecto_repos),
+      ecto: %{
+        repos: Application.fetch_env!(:double_gis_monitor, :ecto_repos),
+        skip_migrations: skip_migrations?
+      },
       interval: interval,
       stages_opts: %{
         fetch: %{city: city, layers: layers},
@@ -64,10 +68,8 @@ defmodule DoubleGisMonitor.Application do
     base ++ rest
   end
 
-  defp get_migrator(%{env: env, ecto_repos: repos}) when is_atom(env) and is_list(repos) do
-    {Ecto.Migrator,
-     repos: repos,
-     skip: System.get_env("SKIP_MIGRATIONS", "false") == "true",
-     log_migrator_sql: env != :prod}
+  defp get_migrator(%{env: env, ecto: %{repos: repos, skip_migrations: skip_migrations?}})
+       when is_atom(env) and is_list(repos) and is_boolean(skip_migrations?) do
+    {Ecto.Migrator, repos: repos, skip: skip_migrations?, log_migrator_sql: env != :prod}
   end
 end

@@ -1,13 +1,15 @@
 defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
   @moduledoc """
-  A pipeline module that receives a map of updated and inserted events and sends these changes to the Telegram bot.
+  A pipeline module that receives a map of updated and inserted events and sends these changes to the bot(s).
 
   For updated events, simply edit the previous sent message.
-  Due to Telegram's architecture, it is not possible to add new attachments for updated events.
+
+  Telegram NOTE #1: due to it's architecture, it is not possible to add new attachments for updated events.
   As a workaround, an "Updated at ..." title will be added to the top of the updated event message.
 
-  Due to Telegram Bot's API limitations on sending messages in a single channel, it will only send 1 message per second.
-  If the event has attachments, the dispatcher will send a message with them and then sleep for as many seconds as the event has attachments.
+  Telegram NOTE #2: due to API limitations on sending messages in a single channel, it will only send 1 message per second.
+  If the event has attachments, the dispatcher will send a message with them and then sleep for as
+  many seconds as the event has attachments.
   """
 
   require DoubleGisMonitor.Bot.Telegram
@@ -23,11 +25,12 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
         timezone: timezone
       }) do
     # TODO: Reduce arguments count
-    with {:ok, updated_messages} <- dispatch(:update, updated_events, timezone, channel_id, city),
+    with updated_messages <- dispatch(:update, updated_events, timezone, channel_id, city),
          {:ok, inserted_messages} <-
            dispatch(:insert, inserted_events, channel_id, timezone, city) do
-      "#{Enum.count(updated_messages)} updates and #{Enum.count(inserted_messages)} new messages dispatched."
-      |> Logger.info()
+      Logger.info(
+        "Dispatch: #{Enum.count(updated_messages)} updates, #{Enum.count(inserted_messages)} new messages"
+      )
 
       {:ok, %{:update => updated_messages, :insert => inserted_messages}}
     else
@@ -38,21 +41,15 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
   end
 
   defp dispatch(:insert, events, channel_id, timezone, city) do
-    with {:ok, sent_messages} <- send_messages(events, channel_id, timezone, city),
-         {:ok, inserted_messages} <- insert_messages(sent_messages) do
-      {:ok, inserted_messages}
-    else
-      error -> error
-    end
+    events
+    |> send_messages(channel_id, timezone, city)
+    |> insert_messages()
   end
 
   defp dispatch(:update, events, tz, channel_id, city) do
-    with {:ok, linked_events} <- link_updates_with_messages(events),
-         {:ok, messages} <- update_messages(linked_events, tz, channel_id, city) do
-      {:ok, messages}
-    else
-      error -> error
-    end
+    events
+    |> link_updates_with_messages()
+    |> update_messages(tz, channel_id, city)
   end
 
   defp insert_messages(messages) when is_list(messages) do
@@ -77,23 +74,18 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
   end
 
   defp send_messages(events, channel_id, timezone, city) when is_list(events) do
-    map_fun =
-      fn event ->
-        case send_event_message(channel_id, event, timezone, city) do
-          {:ok, db_message} ->
-            db_message
+    events
+    |> Enum.map(fn event ->
+      case send_event_message(channel_id, event, timezone, city) do
+        {:ok, db_message} ->
+          db_message
 
-          {:error, error} ->
-            Logger.error("Failed to send new event message: #{inspect({event, error})}")
-            %Database.TelegramMessage{uuid: nil}
-        end
+        {:error, error} ->
+          Logger.error("Failed to send new event message: #{inspect({event, error})}")
+          nil
       end
-
-    filter_fun = fn %Database.TelegramMessage{:uuid => uuid} -> not is_nil(uuid) end
-
-    messages = events |> Enum.map(map_fun) |> Enum.filter(filter_fun)
-
-    {:ok, messages}
+    end)
+    |> Enum.filter(&is_map/1)
   end
 
   defp send_event_message(
@@ -240,23 +232,20 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
       |> DateTime.now!()
       |> Calendar.strftime("%d.%m.%y %H:%M:%S")
 
-    map_fun =
-      fn event ->
-        text = "🔄 Updated at " <> datetime <> " 🔄\n\n" <> prepare_text(event, timezone, city)
+    events
+    |> Enum.map(fn event ->
+      text = "🔄 Updated at " <> datetime <> " 🔄\n\n" <> prepare_text(event, timezone, city)
 
-        case update_message(event, channel_id, text) do
-          {:error, error} ->
-            Logger.error("Failed to update event message: #{inspect({event, error})}")
-            nil
+      case update_message(event, channel_id, text) do
+        {:ok, msg} ->
+          msg
 
-          {:ok, msg} ->
-            msg
-        end
+        {:error, error} ->
+          Logger.error("Failed to update event message: #{inspect({event, error})}")
+          nil
       end
-
-    messages = events |> Enum.map(map_fun) |> Enum.filter(fn msg -> not is_nil(msg) end)
-
-    {:ok, messages}
+    end)
+    |> Enum.filter(&is_map/1)
   end
 
   defp update_message(
@@ -337,8 +326,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
   end
 
   defp update_message_based_on_type({type, count}, channel_id, text, first_message_id)
-       when is_binary(type) and is_integer(count) and is_integer(channel_id) and is_binary(text) and
-              is_integer(first_message_id) do
+       when is_integer(channel_id) and is_binary(text) and is_integer(first_message_id) do
     case {type, count} do
       {"text", 1} ->
         Telegex.edit_message_text(text,
@@ -354,6 +342,9 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
           caption: text,
           parse_mode: "HTML"
         )
+
+      other ->
+        {:error, "Unknown message type #{inspect(other)}"}
     end
   end
 
@@ -438,23 +429,18 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
   end
 
   defp link_updates_with_messages(events) when is_list(events) do
-    map_fun =
-      fn %Database.Event{:uuid => uuid} = event ->
-        messages =
-          case Database.Repo.get(Database.TelegramMessage, uuid) do
-            nil -> %Database.TelegramMessage{uuid: nil}
-            any -> any
-          end
+    events
+    |> Enum.map(fn %Database.Event{:uuid => uuid} = event ->
+      case Database.Repo.get(Database.TelegramMessage, uuid) do
+        nil ->
+          Map.put(event, :linked_messages, %Database.TelegramMessage{uuid: nil})
 
-        Map.put(event, :linked_messages, messages)
+        message ->
+          Map.put(event, :linked_messages, message)
       end
-
-    filter_fun = fn %{:linked_messages => %Database.TelegramMessage{:uuid => t}} ->
-      not is_nil(t)
-    end
-
-    linked_events = events |> Enum.map(map_fun) |> Enum.filter(filter_fun)
-
-    {:ok, linked_events}
+    end)
+    |> Enum.filter(fn %{:linked_messages => %{:uuid => uuid}} ->
+      is_binary(uuid)
+    end)
   end
 end

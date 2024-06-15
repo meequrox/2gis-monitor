@@ -3,7 +3,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   Telegram bot that responds only to messages in a specific channel (set in the private project configuration).
 
   The module supports the usual principle of bot operation (command-response), but using the channel posts.
-  The bot's functions will mainly be used by the dispatch module.
   """
 
   use Telegex.Polling.GenHandler
@@ -24,7 +23,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   @impl true
-  def on_init(_arg) do
+  def on_init(_opts) do
     {:ok, true} =
       [
         %Telegex.Type.BotCommand{command: "help", description: "Print all commands"},
@@ -68,7 +67,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp handle_command(:help, %Telegex.Type.Chat{:id => channel_id}) do
-    {:ok, commands} = Telegex.get_my_commands() |> RateLimiter.sleep_after(__MODULE__, :request)
+    {:ok, commands} =
+      Telegex.get_my_commands()
+      |> RateLimiter.sleep_after(__MODULE__, :request)
 
     case Telegex.send_message(channel_id, commands_to_text(commands)) do
       {:ok, _message} ->
@@ -158,11 +159,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp commands_to_text(commands) when is_list(commands) do
-    map_fun =
-      fn %Telegex.Type.BotCommand{:command => cmd, :description => desc} ->
+    Enum.map_join(commands, "\n", fn
+      %{:command => cmd, :description => desc} ->
         "/" <> cmd <> " - " <> desc
-      end
-
-    Enum.map_join(commands, "\n", map_fun)
+    end)
   end
 end

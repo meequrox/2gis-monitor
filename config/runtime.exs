@@ -67,3 +67,11 @@ config(:double_gis_monitor, :dispatch,
 )
 
 # ^^ Project BOT configuration ^^
+
+skip_migrations? =
+  case System.get_env("SKIP_MIGRATIONS", "false") do
+    "true" -> true
+    _ -> false
+  end
+
+config(:double_gis_monitor, :ecto_migrations, skip: skip_migrations?)

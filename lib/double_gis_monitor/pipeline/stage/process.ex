@@ -1,9 +1,11 @@
 defmodule DoubleGisMonitor.Pipeline.Stage.Process do
   @moduledoc """
-  A pipeline module that receives a list of event maps with binary keys, applies various transformations to them, and then inserts or updates the corresponding database records.
+  A pipeline module that receives a list of event maps with binary keys,
+  applies various transformations to them, and then inserts or updates the corresponding database records.
 
   Before real processing begins, the database is cleaned.
-  If some event in the database was added N minutes ago and is no longer displayed on the 2GIS map, it is deleted from the database.
+  If some event in the database was added N minutes ago and is no longer displayed on the 2GIS map,
+  it is deleted from the database.
   """
 
   require Logger
@@ -15,9 +17,9 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
   @spec run(list(map()), map()) ::
           {:ok, %{update: list(map()), insert: list(map())}} | {:error, atom()}
   def run(events, %{interval: interval}) do
-    with {:ok, new_events} <- convert_events_to_db(events),
-         {:ok, outdated_db_events} <- get_outdated_events(interval),
-         {:ok, db_events_to_delete} <- find_disappeared_events(new_events, outdated_db_events),
+    with new_events <- convert_events_to_db(events),
+         outdated_db_events <- get_outdated_events(interval),
+         db_events_to_delete <- find_disappeared_events(new_events, outdated_db_events),
          {:ok, deleted_events} <- delete_outdated_events(db_events_to_delete),
          {:ok, _deleted_messages} <- delete_outdated_messages(deleted_events),
          {:ok, result_map} <- insert_or_update_events(new_events),
@@ -25,7 +27,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
       %{:update => updated_events, :insert => inserted_events} = fixed_result_map
 
       Logger.info(
-        "#{Enum.count(deleted_events)} events deleted, #{Enum.count(updated_events)} updated, #{Enum.count(inserted_events)} inserted."
+        "Deleted: #{Enum.count(deleted_events)}, updated: #{Enum.count(updated_events)}, inserted: #{Enum.count(inserted_events)}"
       )
 
       {:ok, fixed_result_map}
@@ -41,20 +43,16 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
       {:error, {:insert_or_update_events, changeset}} ->
         Logger.error("Failed to update and insert events: #{inspect(changeset)}.")
         {:error, :insert_or_update}
-
-      other ->
-        Logger.critical("Unhandled result: #{inspect(other)}")
-        {:error, :undefined}
     end
   end
 
   defp fix_result_map(result_map) do
-    new_map =
+    {
+      :ok,
       result_map
       |> Map.update(:update, [], fn existing -> existing end)
       |> Map.update(:insert, [], fn existing -> existing end)
-
-    {:ok, new_map}
+    }
   end
 
   defp insert_or_update_events(events) when is_list(events) do
@@ -212,43 +210,28 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
 
   defp find_disappeared_events(new_events, db_events)
        when is_list(new_events) and is_list(db_events) do
-    filter_fun =
-      fn %{:uuid => db_uuid} ->
-        find_fun =
-          fn %Database.Event{:uuid => uuid} ->
-            uuid == db_uuid
-          end
-
-        Enum.find(new_events, nil, find_fun) === nil
-      end
-
-    outdated_events = Enum.filter(db_events, filter_fun)
-
-    {:ok, outdated_events}
+    Enum.filter(db_events, fn %{:uuid => db_uuid} ->
+      nil ==
+        Enum.find(new_events, nil, fn %{:uuid => uuid} ->
+          uuid == db_uuid
+        end)
+    end)
   end
 
   defp get_outdated_events(interval) when is_integer(interval) do
     ts_now = DateTime.utc_now() |> DateTime.to_unix()
 
-    events =
-      from(e in "events",
-        where: ^ts_now - e.timestamp > ^((interval * 1.9) |> trunc()),
-        select: [:uuid]
-      )
-      |> Database.Repo.all()
-
-    {:ok, events}
+    from(e in "events",
+      where: ^ts_now - e.timestamp > ^((interval * 1.9) |> trunc()),
+      select: [:uuid]
+    )
+    |> Database.Repo.all()
   end
 
   defp convert_events_to_db(events) when is_list(events) do
-    result =
-      for event <- events do
-        {:ok, converted_event} = convert_event_to_db(event)
-        converted_event
-      end
-      |> Enum.filter(fn %Database.Event{:uuid => uuid} -> is_binary(uuid) end)
-
-    {:ok, result}
+    events
+    |> Enum.map(&convert_event_to_db/1)
+    |> Enum.filter(&is_map/1)
   end
 
   defp convert_event_to_db(
@@ -264,7 +247,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
        )
        when is_binary(id) and is_integer(ts) and is_binary(type) and is_map(user_info) and
               is_float(lon) and is_float(lat) and is_integer(likes) and is_integer(dislikes) do
-    new_event = %Database.Event{
+    %Database.Event{
       uuid: id,
       timestamp: ts,
       type: type,
@@ -274,11 +257,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
       feedback: %{likes: likes, dislikes: dislikes * -1},
       attachments: %{count: atch_count, list: atch_list}
     }
-
-    {:ok, new_event}
   end
 
-  defp convert_event_to_db(_other) do
-    {:ok, %Database.Event{uuid: :invalid}}
-  end
+  defp convert_event_to_db(_invalid_event), do: nil
 end

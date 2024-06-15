@@ -35,8 +35,8 @@ defmodule DoubleGisMonitor.MixProject do
       {:postgrex, "~> 0.18.0"},
       {:telegex, "~> 1.8"},
       {:logger_file_backend, "~> 0.0.14"},
-      {:observer_cli, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:observer_cli, "~> 1.7", optional: true, only: [:dev]},
+      {:credo, "~> 1.7", optional: true, only: [:dev]}
     ]
   end
 end
