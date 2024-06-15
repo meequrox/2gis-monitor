@@ -77,13 +77,12 @@ Next, there are two ways to build and run the project:
 
 Basically, this method is used only during development.
 
-Before running the application, you **MUST** set the required environment variables in the `env.sh` file.
+Before running the application, you **MUST** set the required environment variables in the `env` file.
 All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**.
 
 ```bash
-  mix deps.get
-
-  ./start_dev.sh
+  make build
+  make start
 ```
 
 ### Build the production release and launch
@@ -92,16 +91,12 @@ This method is used if you need to build a self-contained release of the applica
 
 It should work **faster** by preloading all the code into memory.
 
-Before running the application, you **MUST** set the required environment variables in the `env.sh` file.
+Before running the application, you **MUST** set the required environment variables in the `env` file.
 All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**.
 
 ```bash
-  MIX_ENV=prod
-
-  mix deps.get --only prod
-  mix release --path release/double_gis_monitor
-
-  ./start_release.sh
+  make build-release
+  make start-release
 ```
 
 ## Deployment
@@ -114,8 +109,6 @@ Before starting the service, you **MUST** set the required environment variable 
 All environment variables are described in detail in the file **[config/runtime.exs](config/runtime.exs)**.
 
 ```bash
-  # Assuming we are in the root directory
-
   cd compose
   cp example.env .env
 ```
