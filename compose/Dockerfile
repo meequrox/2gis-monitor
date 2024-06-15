@@ -1,5 +1,5 @@
 # Stage 1: build
-FROM elixir:1.17-otp-27 AS builder
+FROM elixir:1.16-otp-26 AS builder
 
 ENV MIX_ENV=prod
 
@@ -31,7 +31,7 @@ RUN apt-get update \
 COPY --from=builder /double_gis_monitor /double_gis_monitor
 
 EXPOSE 4369
-ENV ERL_MAX_PORTS=1024
+ENV ERL_MAX_PORTS=512
 
 ENTRYPOINT ["/double_gis_monitor/bin/double_gis_monitor"]
 CMD ["start"]
