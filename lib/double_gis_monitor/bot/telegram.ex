@@ -129,7 +129,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
       {"Worker",
        [
          {"Runs count", Integer.to_string(count)},
-         {"Interval", Integer.to_string(interval)},
+         {"Interval (seconds)", Integer.to_string(interval)},
          {"Last result", inspect(last_result), :code}
        ]},
       {"Database",
@@ -139,7 +139,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
        ]}
     ]
     |> Enum.map_join(
-      "\n",
+      "",
       fn {category, prop_list} ->
         props_str =
           Enum.reduce(prop_list, "", fn
