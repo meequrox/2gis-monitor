@@ -11,10 +11,7 @@ defmodule DoubleGisMonitor.Pipeline.Worker do
   def child_spec() do
     %{
       id: __MODULE__,
-      start: {__MODULE__, :start_link, []},
-      restart: :permanent,
-      type: :worker,
-      shutdown: 10_000
+      start: {__MODULE__, :start_link, []}
     }
   end
 

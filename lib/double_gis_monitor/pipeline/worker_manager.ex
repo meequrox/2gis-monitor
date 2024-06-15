@@ -15,17 +15,14 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
 
   defstruct count: 0,
             last_result: :null,
-            interval: 86400,
+            interval: 86_400,
             stages_opts: %{fetch: %{}, process: %{}, dispatch: %{}}
 
-  @spec child_spec() :: map()
-  def child_spec() do
+  @spec child_spec(map()) :: map()
+  def child_spec(opts) do
     %{
       id: __MODULE__,
-      start: {__MODULE__, :start_link, []},
-      restart: :permanent,
-      type: :worker,
-      shutdown: 10_000
+      start: {__MODULE__, :start_link, [opts]}
     }
   end
 
@@ -49,35 +46,22 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
     GenServer.call(__MODULE__, {:get, :interval})
   end
 
+  @spec get_stages_opts() :: {:ok, map()} | {:error, any()}
+  def get_stages_opts() do
+    GenServer.call(__MODULE__, {:get, :stages_opts})
+  end
+
   @spec set_last_result(any()) :: :ok
   def set_last_result(result) do
     GenServer.cast(__MODULE__, {:set, {:last_result, result}})
   end
 
   @impl true
-  def init(_init_arg) do
-    [city: city, layers: layers, interval: interval] =
-      :double_gis_monitor
-      |> Application.fetch_env!(:fetch)
-      |> Keyword.take([:city, :layers, :interval])
-
-    [timezone: tz, channel_id: channel_id] =
-      :double_gis_monitor
-      |> Application.fetch_env!(:dispatch)
-      |> Keyword.take([:timezone, :channel_id])
-
-    stages_opts = %{
-      fetch: %{city: city, layers: layers},
-      process: %{interval: interval},
-      dispatch: %{channel_id: channel_id, city: city, timezone: tz}
-    }
-
+  def init(%{interval: interval, stages_opts: stages_opts}) do
     state = %__MODULE__{
       interval: interval,
       stages_opts: stages_opts
     }
-
-    Logger.info("Pipeline stages options: #{inspect(stages_opts, pretty: true)}")
 
     send(self(), {:do, :tick})
     {:ok, state}
@@ -96,6 +80,11 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
   @impl true
   def handle_call({:get, :interval}, _from, %{interval: interval} = state) do
     {:reply, {:ok, interval}, state}
+  end
+
+  @impl true
+  def handle_call({:get, :stages_opts}, _from, %{stages_opts: stages_opts} = state) do
+    {:reply, {:ok, stages_opts}, state}
   end
 
   @impl true

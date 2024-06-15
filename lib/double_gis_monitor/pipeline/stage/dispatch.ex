@@ -202,6 +202,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
          text
        )
        when is_integer(count) and is_list(list) and is_binary(text) do
+    # BUG: 'Bad Request: too many messages to send as an album' when attachments: %{count: 11}
     reduce_fun =
       fn url, acc ->
         media =

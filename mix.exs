@@ -4,7 +4,7 @@ defmodule DoubleGisMonitor.MixProject do
   def project do
     [
       app: :double_gis_monitor,
-      version: "1.6.14",
+      version: "1.7.5",
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -13,14 +13,9 @@ defmodule DoubleGisMonitor.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
-    opts = %{
-      env: Application.fetch_env!(:double_gis_monitor, :env),
-      ecto_repos: Application.fetch_env!(:double_gis_monitor, :ecto_repos)
-    }
-
     [
       extra_applications: [:logger],
-      mod: {DoubleGisMonitor.Application, [opts]}
+      mod: {DoubleGisMonitor.Application, []}
     ]
   end
 

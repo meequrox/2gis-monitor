@@ -14,7 +14,7 @@ config(:double_gis_monitor, DoubleGisMonitor.Database.Repo,
   username: System.get_env("POSTGRES_USER", "postgres"),
   password: System.get_env("POSTGRES_PASSWORD", "postgres"),
   hostname: System.get_env("DGM_POSTGRES_HOSTNAME", "localhost"),
-  port: System.get_env("DGM_POSTGRES_PORT", "5432") |> String.to_integer(),
+  port: "DGM_POSTGRES_PORT" |> System.get_env("5432") |> String.to_integer(),
   log: :debug
 )
 
@@ -42,8 +42,8 @@ default_layers = "crash,roadwork,restriction,comment,other"
 
 config(:double_gis_monitor, :fetch,
   city: System.get_env("DGM_CITY", "Moscow"),
-  layers: System.get_env("DGM_LAYERS", default_layers) |> String.split(",", trim: true),
-  interval: System.get_env("DGM_INTERVAL", "600") |> String.to_integer()
+  layers: "DGM_LAYERS" |> System.get_env(default_layers) |> String.split(",", trim: true),
+  interval: "DGM_INTERVAL" |> System.get_env("600") |> String.to_integer()
 )
 
 # ^^ Project FETCHER configuration ^^
@@ -63,7 +63,7 @@ config(:telegex,
 )
 
 config(:double_gis_monitor, :dispatch,
-  channel_id: System.get_env("DGM_TG_CHANNEL", "-1") |> String.to_integer()
+  channel_id: "DGM_TG_CHANNEL" |> System.get_env("-1") |> String.to_integer()
 )
 
 # ^^ Project BOT configuration ^^

@@ -45,8 +45,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
             :chat => %TgType.Chat{:type => "channel", :id => update_channel_id} = chat
           } = message
       }) do
-    {:ok, config_channel_id} =
-      :double_gis_monitor |> Application.fetch_env!(:dispatch) |> Keyword.fetch(:channel_id)
+    {:ok, %{dispatch: %{channel_id: config_channel_id}}} = WorkerManager.get_stages_opts()
 
     if config_channel_id === update_channel_id do
       case text do
@@ -82,49 +81,81 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   defp handle_command(:info, %TgType.Chat{:id => channel_id}) do
-    # TODO: get from one of Pipeline module
-    [city: city, layers: layers] =
-      :double_gis_monitor
-      |> Application.fetch_env!(:fetch)
-      |> Keyword.take([:city, :layers])
-
-    {:ok, runs_count} = WorkerManager.get_count()
-    {:ok, last_result} = WorkerManager.get_last_result()
-    {:ok, interval} = WorkerManager.get_interval()
     # TODO: Get last result timestamp
+    with {:ok, runs_count} <- WorkerManager.get_count(),
+         {:ok, last_result} <- WorkerManager.get_last_result(),
+         {:ok, interval} <- WorkerManager.get_interval(),
+         {:ok, %{fetch: %{city: city, layers: layers}}} <- WorkerManager.get_stages_opts() do
+      reply =
+        %{
+          city: city,
+          layers: layers,
+          count: runs_count,
+          last_result: last_result,
+          interval: interval
+        }
+        |> render_reply(:info)
 
-    reply =
-      [
-        {"Service",
-         """
-         City: #{String.capitalize(city)}
-         Layers: #{inspect(layers)}
-         """},
-        {"Worker",
-         """
-         Runs count: #{runs_count}
-         Last result: #{inspect(last_result)}
-         Interval: #{interval} seconds
-         """},
-        {"Database",
-         """
-         Events count: #{Database.Repo.aggregate(Database.Event, :count)}
-         """}
-      ]
-      |> Enum.map_join(
-        "\n",
-        fn {section, props} ->
-          "<b>" <> section <> "</b>\n" <> Telegex.Tools.safe_html(props)
-        end
-      )
+      case Telegex.send_message(channel_id, reply, parse_mode: "HTML") do
+        {:ok, _message} ->
+          RateLimiter.sleep_after(:ok, __MODULE__, :send)
 
-    case Telegex.send_message(channel_id, reply, parse_mode: "HTML") do
-      {:ok, _message} ->
-        RateLimiter.sleep_after(:ok, __MODULE__, :send)
-
+        {:error, error} ->
+          Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
+      end
+    else
       {:error, error} ->
-        Logger.error("Failed to send reply to #{channel_id}: #{inspect(error)}")
+        Logger.error("Failed to get info for /info reply: #{inspect(error)}")
     end
+  end
+
+  defp render_reply(
+         %{
+           city: city,
+           layers: layers,
+           count: count,
+           last_result: last_result,
+           interval: interval
+         },
+         :info
+       )
+       when is_binary(city) and is_integer(count) and is_integer(interval) do
+    [
+      {"Service",
+       [
+         {"City", String.capitalize(city)},
+         {"Layers", inspect(layers)}
+       ]},
+      {"Worker",
+       [
+         {"Runs count", Integer.to_string(count)},
+         {"Interval", Integer.to_string(interval)},
+         {"Last result", inspect(last_result), :code}
+       ]},
+      {"Database",
+       [
+         {"Events count",
+          Database.Event |> Database.Repo.aggregate(:count) |> Integer.to_string()}
+       ]}
+    ]
+    |> Enum.map_join(
+      "\n",
+      fn {category, prop_list} ->
+        props_str =
+          Enum.reduce(prop_list, "", fn
+            {prop_name, prop_value}, acc ->
+              acc <> "#{prop_name}: #{Telegex.Tools.safe_html(prop_value)}\n"
+
+            {prop_name, prop_value, :code}, acc ->
+              acc <> "#{prop_name}: <code>#{prop_value}</code>\n"
+          end)
+
+        """
+        <b># #{category}</b>
+        #{props_str}
+        """
+      end
+    )
   end
 
   defp commands_to_text(commands) when is_list(commands) do
