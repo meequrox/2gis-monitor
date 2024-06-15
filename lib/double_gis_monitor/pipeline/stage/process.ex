@@ -151,7 +151,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
   defp delete_outdated_messages(events) when is_list(events) do
     map_fun =
       fn %{:uuid => uuid} ->
-        case Database.Repo.get(Database.Message, uuid) do
+        case Database.Repo.get(Database.TelegramMessage, uuid) do
           nil ->
             nil
 
@@ -173,7 +173,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Process do
   end
 
   defp delete_outdated_event_messages(:database, %{:uuid => uuid}) when is_binary(uuid) do
-    case Database.Repo.delete(%Database.Message{uuid: uuid},
+    case Database.Repo.delete(%Database.TelegramMessage{uuid: uuid},
            returning: false
          ) do
       {:ok, struct} ->

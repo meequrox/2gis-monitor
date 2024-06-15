@@ -85,11 +85,11 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
           {:error, error} ->
             Logger.error("Failed to send new event message: #{inspect({event, error})}")
-            %Database.Message{uuid: nil}
+            %Database.TelegramMessage{uuid: nil}
         end
       end
 
-    filter_fun = fn %Database.Message{:uuid => uuid} -> not is_nil(uuid) end
+    filter_fun = fn %Database.TelegramMessage{:uuid => uuid} -> not is_nil(uuid) end
 
     messages = events |> Enum.map(map_fun) |> Enum.filter(filter_fun)
 
@@ -128,7 +128,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
     case Telegex.send_message(channel_id, text, opts) do
       {:ok, %Telegex.Type.Message{:message_id => message_id}} ->
-        db_message = %Database.Message{
+        db_message = %Database.TelegramMessage{
           uuid: uuid,
           type: "text",
           count: 1,
@@ -169,7 +169,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
         list =
           for %Telegex.Type.Message{:message_id => message_id} <- messages, do: message_id
 
-        db_message = %Database.Message{
+        db_message = %Database.TelegramMessage{
           uuid: uuid,
           type: "caption",
           count: attachments_count,
@@ -261,7 +261,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
   defp update_message(
          %{
-           :linked_messages => %Database.Message{
+           :linked_messages => %Database.TelegramMessage{
              :type => type,
              :count => count,
              :list => [first_message_id | _rest]
@@ -301,7 +301,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
 
   defp handle_update_message_error(
          %Telegex.Error{:error_code => code, :description => desc} = error,
-         %{:uuid => uuid, :linked_messages => %Database.Message{:type => type}} =
+         %{:uuid => uuid, :linked_messages => %Database.TelegramMessage{:type => type}} =
            event,
          channel_id,
          text,
@@ -441,15 +441,15 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Dispatch do
     map_fun =
       fn %Database.Event{:uuid => uuid} = event ->
         messages =
-          case Database.Repo.get(Database.Message, uuid) do
-            nil -> %Database.Message{uuid: nil}
+          case Database.Repo.get(Database.TelegramMessage, uuid) do
+            nil -> %Database.TelegramMessage{uuid: nil}
             any -> any
           end
 
         Map.put(event, :linked_messages, messages)
       end
 
-    filter_fun = fn %{:linked_messages => %Database.Message{:uuid => t}} ->
+    filter_fun = fn %{:linked_messages => %Database.TelegramMessage{:uuid => t}} ->
       not is_nil(t)
     end
 

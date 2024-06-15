@@ -10,7 +10,6 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   alias DoubleGisMonitor.{RateLimiter, Database}
   alias DoubleGisMonitor.Pipeline.WorkerManager
-  alias Telegex.Type, as: TgType
 
   @impl true
   def on_boot() do
@@ -28,8 +27,8 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   def on_init(_arg) do
     {:ok, true} =
       [
-        %TgType.BotCommand{command: "help", description: "Print all commands"},
-        %TgType.BotCommand{command: "info", description: "Print service status"}
+        %Telegex.Type.BotCommand{command: "help", description: "Print all commands"},
+        %Telegex.Type.BotCommand{command: "info", description: "Print service status"}
       ]
       |> Telegex.set_my_commands()
       |> RateLimiter.sleep_after(__MODULE__, :request)
@@ -38,11 +37,11 @@ defmodule DoubleGisMonitor.Bot.Telegram do
   end
 
   @impl true
-  def on_update(%TgType.Update{
+  def on_update(%Telegex.Type.Update{
         :channel_post =>
-          %TgType.Message{
+          %Telegex.Type.Message{
             :text => text,
-            :chat => %TgType.Chat{:type => "channel", :id => update_channel_id} = chat
+            :chat => %Telegex.Type.Chat{:type => "channel", :id => update_channel_id} = chat
           } = message
       }) do
     {:ok, %{dispatch: %{channel_id: config_channel_id}}} = WorkerManager.get_stages_opts()
@@ -68,7 +67,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     Logger.info("Rejected update: #{inspect(update)}")
   end
 
-  defp handle_command(:help, %TgType.Chat{:id => channel_id}) do
+  defp handle_command(:help, %Telegex.Type.Chat{:id => channel_id}) do
     {:ok, commands} = Telegex.get_my_commands() |> RateLimiter.sleep_after(__MODULE__, :request)
 
     case Telegex.send_message(channel_id, commands_to_text(commands)) do
@@ -80,7 +79,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
     end
   end
 
-  defp handle_command(:info, %TgType.Chat{:id => channel_id}) do
+  defp handle_command(:info, %Telegex.Type.Chat{:id => channel_id}) do
     # TODO: Get last result timestamp
     with {:ok, runs_count} <- WorkerManager.get_count(),
          {:ok, last_result} <- WorkerManager.get_last_result(),
@@ -160,7 +159,7 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   defp commands_to_text(commands) when is_list(commands) do
     map_fun =
-      fn %TgType.BotCommand{:command => cmd, :description => desc} ->
+      fn %Telegex.Type.BotCommand{:command => cmd, :description => desc} ->
         "/" <> cmd <> " - " <> desc
       end
 

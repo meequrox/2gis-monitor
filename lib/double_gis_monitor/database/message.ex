@@ -1,4 +1,4 @@
-defmodule DoubleGisMonitor.Database.Message do
+defmodule DoubleGisMonitor.Database.TelegramMessage do
   @moduledoc """
   Struct that represent a ID list of Telegram messages being sent by dispatcher module.
 
@@ -15,7 +15,7 @@ defmodule DoubleGisMonitor.Database.Message do
 
   @primary_key {:uuid, :string, autogenerate: false}
 
-  schema "messages" do
+  schema "telegram_messages" do
     field(:type, :string)
     field(:count, :integer)
     field(:list, {:array, :integer})
