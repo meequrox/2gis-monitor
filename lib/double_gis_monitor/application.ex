@@ -32,9 +32,11 @@ defmodule DoubleGisMonitor.Application do
       },
       interval: interval,
       stages_opts: %{
-        fetch: %{city: city, layers: layers},
-        process: %{interval: interval},
-        dispatch: %{channel_id: channel_id, city: city, timezone: tz}
+        city: city,
+        layers: layers,
+        interval: interval,
+        channel_id: channel_id,
+        timezone: tz
       }
     }
 
@@ -46,7 +48,7 @@ defmodule DoubleGisMonitor.Application do
     |> Supervisor.start_link(strategy: :one_for_one, name: __MODULE__.Supervisor)
   end
 
-  defp get_children(%{env: env} = opts) when is_atom(env) do
+  defp get_children(%{env: env} = opts) do
     base = [
       get_migrator(opts),
       DoubleGisMonitor.Database.Repo
@@ -68,8 +70,7 @@ defmodule DoubleGisMonitor.Application do
     base ++ rest
   end
 
-  defp get_migrator(%{env: env, ecto: %{repos: repos, skip_migrations: skip_migrations?}})
-       when is_atom(env) and is_list(repos) and is_boolean(skip_migrations?) do
+  defp get_migrator(%{env: env, ecto: %{repos: repos, skip_migrations: skip_migrations?}}) do
     {Ecto.Migrator, repos: repos, skip: skip_migrations?, log_migrator_sql: env != :prod}
   end
 end

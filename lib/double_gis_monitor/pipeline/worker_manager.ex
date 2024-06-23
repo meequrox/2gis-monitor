@@ -109,7 +109,6 @@ defmodule DoubleGisMonitor.Pipeline.WorkerManager do
 
   @impl true
   def handle_cast({:set, {:last_result, result}}, state) do
-    # TODO: Also set last result timestamp
     {:noreply, %{state | last_result: result}}
   end
 

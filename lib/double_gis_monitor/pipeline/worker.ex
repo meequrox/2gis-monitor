@@ -45,21 +45,24 @@ defmodule DoubleGisMonitor.Pipeline.Worker do
 
   @impl true
   def handle_cast(
-        {:start,
-         {:pipeline, %{fetch: fetch_opts, process: process_opts, dispatch: dispatch_opts}}},
+        {:start, {:pipeline, opts}},
         state
       ) do
-    with :ok <- Logger.info("Start pipeline"),
-         {:ok, fetched} <- Stage.Fetch.run(fetch_opts),
-         {:ok, processed} <- Stage.Process.run(fetched, process_opts),
-         {:ok, %{update: updated, insert: inserted}} <-
-           Stage.Dispatch.run(processed, dispatch_opts),
-         :ok <- Logger.info("End pipeline") do
-      {:ok, %{update: Enum.count(updated), insert: Enum.count(inserted)}}
+    Logger.info("Start pipeline")
+
+    with {:ok, fetched} <- Stage.Fetch.run(opts),
+         processed <- Stage.Process.run(fetched, opts),
+         {:ok, %{delete: deleted, update: updated, insert: inserted}} <-
+           Stage.Dispatch.run(processed, opts) do
+      Logger.info("End pipeline")
+
+      {:ok,
+       %{delete: Enum.count(deleted), update: Enum.count(updated), insert: Enum.count(inserted)}}
     else
-      {:error, error} = err ->
+      {:error, error} ->
         Logger.error("Pipeline failed: #{inspect(error)}")
-        err
+
+        {:error, error}
     end
     |> WorkerManager.set_last_result()
 
