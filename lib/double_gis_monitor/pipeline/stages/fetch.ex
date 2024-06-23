@@ -10,6 +10,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
   alias DoubleGisMonitor.{Database, RateLimiter}
 
   @api_uri "tugc.2gis.com"
+  @retries_max 3
 
   @spec run(map()) :: {:ok, list(map())} | {:error, term()}
   def run(%{city: city, layers: layers}) do
@@ -43,7 +44,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
       {:ok, events}
     else
       {:error, error} ->
-        if attempt < 3 do
+        if attempt < @retries_max do
           RateLimiter.sleep(:doublegis, :retry)
           request_events(url, headers, attempt + 1)
         else
@@ -120,7 +121,7 @@ defmodule DoubleGisMonitor.Pipeline.Stage.Fetch do
         {:ok, {0, []}}
 
       {:error, error} ->
-        if attempt < 3 do
+        if attempt < @retries_max do
           RateLimiter.sleep(:doublegis, :retry)
           request_images(url, headers, attempt + 1)
         else
