@@ -1,6 +1,6 @@
 defmodule DoubleGisMonitor.Database.Event do
   @moduledoc """
-  A struct representing a 2GIS event processed by the corresponding module.
+  A model representing a 2GIS event processed by the corresponding module.
   """
 
   use Ecto.Schema
@@ -11,9 +11,14 @@ defmodule DoubleGisMonitor.Database.Event do
     field(:timestamp, :integer)
     field(:type, :string)
     field(:username, :string)
-    field(:coordinates, {:map, :float})
+    field(:geo, {:array, :float})
     field(:comment, :string)
-    field(:feedback, {:map, :integer})
-    field(:attachments, :map)
+    field(:likes, :integer)
+    field(:dislikes, :integer)
+    field(:images_count, :integer)
+    field(:images_list, {:array, :string})
+    field(:city, :string)
+
+    timestamps()
   end
 end
