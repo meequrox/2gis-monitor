@@ -11,7 +11,10 @@ defmodule DoubleGisMonitor.RateLimiter do
   require Logger
 
   @timeout_map %{
-    doublegis: %{request: 100, retry: 2000},
+    doublegis: %{
+      request: 100,
+      retry: 2000
+    },
     telegram: %{
       request: 100,
       send: 3100,
@@ -24,7 +27,7 @@ defmodule DoubleGisMonitor.RateLimiter do
   @timeout_default 50
 
   @spec sleep(atom(), atom(), integer()) :: :ok
-  def sleep(service, action, times) when is_integer(times) do
+  def sleep(service, action, times \\ 1) when is_integer(times) do
     service
     |> get_timeout(action)
     |> Kernel.*(times)
