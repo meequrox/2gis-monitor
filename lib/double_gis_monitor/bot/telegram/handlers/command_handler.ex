@@ -1,10 +1,10 @@
 defmodule DoubleGisMonitor.Bot.Telegram.CommandHandler do
   require Logger
 
-  alias DoubleGisMonitor.Bot.Telegram.HelpTemplate
-  alias DoubleGisMonitor.Bot.Telegram.InfoTemplate
-  alias DoubleGisMonitor.Pipeline.WorkerManager
+  alias DoubleGisMonitor.Bot.Telegram.{HelpTemplate, InfoTemplate}
   alias DoubleGisMonitor.Database.EventHandler
+  alias DoubleGisMonitor.Pipeline.WorkerManager
+  alias DoubleGisMonitor.RateLimiter
 
   def handle("/help", %{id: channel_id}) do
     {:ok, commands} = Telegex.get_my_commands()

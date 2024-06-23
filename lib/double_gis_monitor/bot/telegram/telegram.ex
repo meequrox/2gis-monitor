@@ -7,8 +7,9 @@ defmodule DoubleGisMonitor.Bot.Telegram do
 
   use Telegex.Polling.GenHandler
 
-  alias DoubleGisMonitor.RateLimiter
   alias DoubleGisMonitor.Bot.Telegram.CommandHandler
+  alias DoubleGisMonitor.Pipeline.WorkerManager
+  alias DoubleGisMonitor.RateLimiter
 
   @impl true
   def on_boot() do
